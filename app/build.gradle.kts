@@ -61,6 +61,13 @@ android {
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.findByName("release")
         }
+        // 性能測定用: リリースと同じ最適化 (C は -O2) でデバッグ署名。デバッグ版に上書きでき、端末のデータが残る。
+        // src/profile/AndroidManifest.xml で profileable (simpleperf で計測可能) にしている。
+        create("profile") {
+            initWith(getByName("release"))
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += listOf("release")
+        }
     }
     buildFeatures {
         // デバッグ用ログを BuildConfig.DEBUG で切り替える

@@ -129,7 +129,15 @@ typedef	signed char			BOOL;
 
 #define	SUPPORT_UTF8
 #define	SUPPORT_16BPP
-#define	SCREEN_BPP		16
+/* 32bit で描くと SDL (GLES2) へ変換なしで転送できる (sdl2/scrnmng.c 参照) */
+#define	SUPPORT_32BPP
+/* 32bit 画面のとき np2 内蔵メニューは 24bit の作業領域を使う (scrnmng_entermenu)。無いとメニューが開かない */
+#define	SUPPORT_24BPP
+/* 24bit 作業領域のバイト順 (上流では win9x/scrnmng.h だけが定義している) */
+#define	RGB24_B		0
+#define	RGB24_G		1
+#define	RGB24_R		2
+#define	SCREEN_BPP		32
 #define	MEMOPTIMIZE		2
 
 #define	SUPPORT_HOSTDRV

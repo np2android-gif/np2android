@@ -108,7 +108,12 @@ ia32(void)
 {
 	int rv;
 
-	rv = sigsetjmp(exec_1step_jmpbuf, 1);
+	/*
+	 * Android: savemask = 0。1 だと呼ぶたびに rt_sigprocmask のシステムコールが走り、
+	 * ia32() は 1 秒に数千回呼ばれるため CPU 時間の 6% 以上を使っていた (simpleperf で確認)。
+	 * np2 はシグナルを使わないのでマスクの保存・復元は不要。
+	 */
+	rv = sigsetjmp(exec_1step_jmpbuf, 0);
 	switch (rv) {
 	case 0:
 		break;
@@ -152,7 +157,7 @@ ia32_step(void)
 {
 	int rv;
 
-	rv = sigsetjmp(exec_1step_jmpbuf, 1);
+	rv = sigsetjmp(exec_1step_jmpbuf, 0);	/* Android: savemask = 0 (ia32() と同じ理由) */
 	switch (rv) {
 	case 0:
 		break;

@@ -89,8 +89,18 @@ BRESULT scrnmng_create(int width, int height) {
 	s_sdlWindow = SDL_CreateWindow(app_name, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, width, height, 0);
 	s_renderer = SDL_CreateRenderer(s_sdlWindow, -1, 0);
 	SDL_RenderSetLogicalSize(s_renderer, width, height);
+#if defined(SCREEN_BPP) && (SCREEN_BPP == 32)
+	/*
+	 * Android: GLES2 レンダラーは RGB565 テクスチャを持てず、SDL_UpdateTexture のたびに CPU で
+	 * 32bit へ変換していた (Blit_RGB565_32、CPU 時間の約 4%)。np2 の RGB32 (メモリ上 B,G,R,X) と
+	 * 同じ SDL_PIXELFORMAT_RGB888 で描けば変換なしで転送できる。
+	 */
+	s_texture = SDL_CreateTexture(s_renderer, SDL_PIXELFORMAT_RGB888, SDL_TEXTUREACCESS_STATIC, width, height);
+	s_surface = SDL_CreateRGBSurface(SDL_SWSURFACE, width, height, 32, 0x00ff0000, 0x0000ff00, 0x000000ff, 0);
+#else
 	s_texture = SDL_CreateTexture(s_renderer, SDL_PIXELFORMAT_RGB565, SDL_TEXTUREACCESS_STATIC, width, height);
 	s_surface = SDL_CreateRGBSurface(SDL_SWSURFACE, width, height, 16, 0xf800, 0x07e0, 0x001f, 0);
+#endif
 
 	surface = s_surface;
 	r = FALSE;
