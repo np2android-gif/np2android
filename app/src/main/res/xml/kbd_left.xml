@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 左余白パネル: 表示切替・メニュー・マウスボタン -->
+<!-- code: PC-98 キーコード(10進) / 117=ESC 118=左クリック 119=右クリック 120=np2メニュー 121=ステートセーブ 122=ステートロード 123=ページ切替 124=キーボード表示切替 125=側面キー表示切替 -->
+<!-- width/gap: キーボード幅に対する %、row の height: 行の高さの比率 (既定 1) -->
+<keyboard keyWidth="50">
+    <row>
+        <key code="124" label="⌨"/>
+        <key code="125" label="▦"/>
+    </row>
+    <row>
+        <key code="120" label="MENU" width="100"/>
+    </row>
+    <row>
+        <key code="96" label="STOP"/>
+        <key code="97" label="COPY"/>
+    </row>
+    <row height="2"/>
+    <row height="2">
+        <key code="118" label="L"/>
+        <key code="119" label="R"/>
+    </row>
+</keyboard>

@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- フルキーボード (拡張): 旧版 res/xml/keyboard.xml の 6-10 行目 -->
+<!-- code: PC-98 キーコード(10進) / 117=ESC 118=左クリック 119=右クリック 120=np2メニュー 121=ステートセーブ 122=ステートロード 123=ページ切替 124=キーボード表示切替 125=側面キー表示切替 -->
+<!-- width/gap: キーボード幅に対する % -->
+<keyboard keyWidth="7.5">
+    <row>
+        <key code="117" label="ESC" width="15"/>
+        <key code="14" label="BS" width="15"/>
+        <key code="114" label="カナ" gap="3.75"/>
+        <key code="56" label="INS"/>
+        <key code="57" label="DEL"/>
+        <key code="62" label="CLR" gap="3.75"/>
+        <key code="63" label="HELP"/>
+        <key code="64" label="-"/>
+        <key code="65" label="/"/>
+        <key code="123" label="⇄" width="10"/>
+    </row>
+    <row>
+        <key code="15" label="TAB" width="15"/>
+        <key code="28" label="RET" width="15"/>
+        <key code="115" label="GRPH" gap="3.75"/>
+        <key code="54" label="R UP"/>
+        <key code="55" label="RDWN"/>
+        <key code="66" label="7" gap="3.75"/>
+        <key code="67" label="8"/>
+        <key code="68" label="9"/>
+        <key code="69" label="*"/>
+    </row>
+    <row>
+        <key code="116" label="CTRL"/>
+        <key code="113" label="CAPS"/>
+        <key code="52" label="SPACE" width="15"/>
+        <key code="58" label="↑" width="15" gap="7.5"/>
+        <key code="70" label="4" gap="7.5"/>
+        <key code="71" label="5"/>
+        <key code="72" label="6"/>
+        <key code="73" label="+"/>
+    </row>
+    <row>
+        <key code="112" label="SHIFT" width="15"/>
+        <key code="81" label="NFER"/>
+        <key code="53" label="XFER"/>
+        <key code="59" label="←" width="15"/>
+        <key code="60" label="→" width="15"/>
+        <key code="74" label="1"/>
+        <key code="75" label="2"/>
+        <key code="76" label="3"/>
+        <key code="77" label="="/>
+    </row>
+    <row>
+        <key code="118" label="L Click" width="15"/>
+        <key code="119" label="R Click" width="15"/>
+        <key code="61" label="↓" width="15" gap="7.5"/>
+        <key code="78" label="0" gap="7.5"/>
+        <key code="79" label=","/>
+        <key code="80" label="."/>
+        <key code="28" label="RET"/>
+    </row>
+</keyboard>

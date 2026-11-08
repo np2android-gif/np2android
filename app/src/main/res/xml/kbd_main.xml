@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- フルキーボード (メイン): 旧版 res/xml/keyboard.xml の 1-5 行目 -->
+<!-- code: PC-98 キーコード(10進) / 117=ESC 118=左クリック 119=右クリック 120=np2メニュー 121=ステートセーブ 122=ステートロード 123=ページ切替 124=キーボード表示切替 125=側面キー表示切替 -->
+<!-- width/gap: キーボード幅に対する % -->
+<keyboard keyWidth="7.5">
+    <row>
+        <key code="96" label="STOP"/>
+        <key code="97" label="COPY"/>
+        <key code="98" label="F1"/>
+        <key code="99" label="F2"/>
+        <key code="100" label="F3"/>
+        <key code="101" label="F4"/>
+        <key code="102" label="F5"/>
+        <key code="103" label="F6"/>
+        <key code="104" label="F7"/>
+        <key code="105" label="F8"/>
+        <key code="106" label="F9"/>
+        <key code="107" label="F10"/>
+        <key code="123" label="⇄" width="10"/>
+    </row>
+    <row>
+        <key code="1" label="1"/>
+        <key code="2" label="2"/>
+        <key code="3" label="3"/>
+        <key code="4" label="4"/>
+        <key code="5" label="5"/>
+        <key code="6" label="6"/>
+        <key code="7" label="7"/>
+        <key code="8" label="8"/>
+        <key code="9" label="9"/>
+        <key code="10" label="0"/>
+        <key code="11" label="-"/>
+        <key code="12" label="^"/>
+    </row>
+    <row>
+        <key code="16" label="Q"/>
+        <key code="17" label="W"/>
+        <key code="18" label="E"/>
+        <key code="19" label="R"/>
+        <key code="20" label="T"/>
+        <key code="21" label="Y"/>
+        <key code="22" label="U"/>
+        <key code="23" label="I"/>
+        <key code="24" label="O"/>
+        <key code="25" label="P"/>
+        <key code="26" label="＠"/>
+        <key code="13" label="￥"/>
+    </row>
+    <row>
+        <key code="29" label="A"/>
+        <key code="30" label="S"/>
+        <key code="31" label="D"/>
+        <key code="32" label="F"/>
+        <key code="33" label="G"/>
+        <key code="34" label="H"/>
+        <key code="35" label="J"/>
+        <key code="36" label="K"/>
+        <key code="37" label="L"/>
+        <key code="38" label=";"/>
+        <key code="39" label=":"/>
+        <key code="27" label="["/>
+    </row>
+    <row>
+        <key code="41" label="Z"/>
+        <key code="42" label="X"/>
+        <key code="43" label="C"/>
+        <key code="44" label="V"/>
+        <key code="45" label="B"/>
+        <key code="46" label="N"/>
+        <key code="47" label="M"/>
+        <key code="48" label=","/>
+        <key code="49" label="."/>
+        <key code="50" label="/"/>
+        <key code="51" label="_"/>
+        <key code="40" label="]"/>
+    </row>
+</keyboard>

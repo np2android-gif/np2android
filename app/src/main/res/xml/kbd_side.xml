@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 側面キー: 旧版 res/xml/sidekeyboard.xml -->
+<!-- code: PC-98 キーコード(10進) / 117=ESC 118=左クリック 119=右クリック 120=np2メニュー 121=ステートセーブ 122=ステートロード 123=ページ切替 124=キーボード表示切替 125=側面キー表示切替 -->
+<!-- width/gap: キーボード幅に対する % -->
+<keyboard keyWidth="25">
+    <row>
+        <key code="15" label="TAB"/>
+        <key code="117" label="ESC"/>
+        <key code="121" label="S"/>
+        <key code="122" label="L"/>
+    </row>
+    <row>
+        <key code="116" label="CTL"/>
+        <key code="112" label="SFT"/>
+        <key code="113" label="CAP"/>
+        <key code="114" label="カナ"/>
+    </row>
+    <row>
+        <key code="115" label="GRH"/>
+        <key code="81" label="NFR"/>
+        <key code="53" label="XFR"/>
+        <key code="52" label="SPC"/>
+    </row>
+    <row>
+        <key code="62" label="CLR"/>
+        <key code="63" label="HLP"/>
+        <key code="64" label="-"/>
+        <key code="65" label="/"/>
+    </row>
+    <row>
+        <key code="66" label="7"/>
+        <key code="67" label="8"/>
+        <key code="68" label="9"/>
+        <key code="69" label="*"/>
+    </row>
+    <row>
+        <key code="70" label="4"/>
+        <key code="71" label="5"/>
+        <key code="72" label="6"/>
+        <key code="73" label="+"/>
+    </row>
+    <row>
+        <key code="74" label="1"/>
+        <key code="75" label="2"/>
+        <key code="76" label="3"/>
+        <key code="77" label="="/>
+    </row>
+    <row>
+        <key code="78" label="0"/>
+        <key code="79" label=","/>
+        <key code="80" label="."/>
+        <key code="28" label="RET"/>
+    </row>
+</keyboard>
