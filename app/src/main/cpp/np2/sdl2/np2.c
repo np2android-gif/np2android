@@ -86,6 +86,10 @@ static int flagload(const char *ext, const char *title, BOOL force) {
 	char	buf2[1024 + 256];
 
 	getstatfilename(path, ext, sizeof(path));
+	/* Android: 初回起動など、ファイルが無いだけならエラー表示せずにそのまま起動する */
+	if (file_attr(path) == -1) {
+		return(DID_NO);
+	}
 	id = DID_YES;
 	ret = statsave_check(path, buf, sizeof(buf));
 	if (ret & (~STATFLAG_DISKCHG)) {
