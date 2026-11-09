@@ -189,12 +189,12 @@ class Np2Activity : SDLActivity(), KeyboardController.Actions, Np2Menu.Host, Set
     /** SAF で選ばれた [uri] を作業フォルダにコピーして [target] へ挿入する */
     private fun importPicked(target: Np2Menu.DiskTarget, uri: Uri) {
         val name = DiskImages.sanitize(DiskImages.displayName(this, uri) ?: uri.lastPathSegment ?: "disk")
-        if (!DiskImages.matches(target.kind, name)) {
+        if (!target.accepts(name)) {
             dialog()
-                .setTitle("対応していない形式です")
-                .setMessage("$name\n\n${target.label} に使える拡張子:\n" +
-                        target.kind.extensions.sorted().joinToString(" "))
-                .setPositiveButton("OK", null)
+                .setTitle(R.string.disk_unsupported_title)
+                .setMessage(getString(R.string.disk_unsupported_message, name, target.label,
+                    target.extensions.sorted().joinToString(" ")))
+                .setPositiveButton(R.string.ok, null)
                 .show()
             return
         }
@@ -270,7 +270,7 @@ class Np2Activity : SDLActivity(), KeyboardController.Actions, Np2Menu.Host, Set
     private fun onDirectPicked(target: Np2Menu.DiskTarget, uri: Uri, flags: Int) {
         val name = DiskImages.displayName(this, uri) ?: uri.lastPathSegment ?: "disk"
         pendingCopyUri = uri
-        openInBackground(name, target) { DiskImageSource.openPicked(this, uri, flags, target.kind) }
+        openInBackground(name, target) { DiskImageSource.openPicked(this, uri, flags, target) }
     }
 
     /** 直接開けなかったときに、コピー方式に切り替えるための URI */
@@ -316,7 +316,7 @@ class Np2Activity : SDLActivity(), KeyboardController.Actions, Np2Menu.Host, Set
             is DiskImageSource.Result.Unsupported -> dialog()
                 .setTitle(R.string.disk_unsupported_title)
                 .setMessage(getString(R.string.disk_unsupported_message, result.name, target.label,
-                    target.kind.extensions.sorted().joinToString(" ")))
+                    target.extensions.sorted().joinToString(" ")))
                 .setPositiveButton(R.string.ok, null)
                 .show()
             is DiskImageSource.Result.NotSeekable -> {

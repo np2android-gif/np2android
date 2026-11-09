@@ -12,6 +12,7 @@
 #include <android/log.h>
 #include "dosio.h"
 #include "android_safio.h"
+#include "np2bridge.h"
 
 #define LOG_TAG		"NP2SAF"
 #define LOGI(...)	__android_log_print(ANDROID_LOG_INFO, LOG_TAG, __VA_ARGS__)
@@ -26,6 +27,9 @@ typedef struct {
 	char	path[MAX_PATH];
 	int		fd;				/* -1 = 空き */
 	BOOL	readonly;
+	dev_t	dev;			/* 書き込みエラーの FILE* がどのエントリーか調べる用 */
+	ino_t	ino;
+	UINT32	lasterror;		/* 最後にエラーを通知した時刻 (連続して通知しない) */
 } SAFENTRY;
 
 static SAFENTRY			s_entry[SAFIO_MAX];
@@ -197,6 +201,9 @@ BRESULT safio_register(const char *id, const char *name, int fd, BOOL readonly,
 	SDL_strlcpy(e->id, id, sizeof(e->id));
 	e->fd = newfd;
 	e->readonly = readonly;
+	e->dev = sb.st_dev;
+	e->ino = sb.st_ino;
+	e->lasterror = 0;
 	SDL_strlcpy(path, e->path, size);
 	pthread_mutex_unlock(&s_lock);
 
@@ -281,6 +288,44 @@ short safio_attr(const char *path)
 	attr = (e == NULL) ? -1 : (e->readonly ? FILEATTR_READONLY : 0);
 	pthread_mutex_unlock(&s_lock);
 	return attr;
+}
+
+void safio_ioerror(FILE *fp)
+{
+	struct stat sb;
+	char path[MAX_PATH];
+	UINT32 now;
+	int err;
+	int i;
+
+	err = errno;
+	if ((fp == NULL) || (fstat(fileno(fp), &sb) != 0)) {
+		return;
+	}
+	path[0] = '\0';
+	now = SDL_GetTicks();
+	pthread_mutex_lock(&s_lock);
+	init_locked();
+	for (i = 0; i < SAFIO_MAX; i++) {
+		SAFENTRY *e = &s_entry[i];
+		if ((e->fd >= 0) && (e->dev == sb.st_dev) && (e->ino == sb.st_ino)) {
+			LOGE("write error: %s: %s", e->path, strerror(err));
+			/*
+			 * 読み取り専用で開いた HDD への書き込みは失敗して当然 (マウント時に知らせてある)。
+			 * それ以外で同じイメージへの失敗は続けて起きるので、通知は 10 秒に 1 回まで
+			 */
+			if ((!e->readonly) &&
+				((e->lasterror == 0) || ((now - e->lasterror) > 10000))) {
+				e->lasterror = now ? now : 1;
+				SDL_strlcpy(path, e->path, sizeof(path));
+			}
+			break;
+		}
+	}
+	pthread_mutex_unlock(&s_lock);
+	if (path[0] != '\0') {
+		np2bridge_diskerror(path);
+	}
 }
 
 void safio_syncall(void)

@@ -6,6 +6,7 @@
 #endif
 #include "dosio.h"
 #if defined(__ANDROID__)	/* ANDROID-SAF */
+#include <stdio_ext.h>
 #include "android_safio.h"
 #endif
 #if defined(WIN32)
@@ -68,7 +69,13 @@ FILEH file_create(const char *path) {
 
 long file_seek(FILEH handle, long pointer, int method) {
 
+#if defined(__ANDROID__)	/* ANDROID-SAF: fseek はバッファの書き出しも行うので失敗を知らせる */
+	if (fseek(handle, pointer, method) != 0) {
+		safio_ioerror(handle);
+	}
+#else
 	fseek(handle, pointer, method);
+#endif
 	return(ftell(handle));
 }
 
@@ -79,7 +86,17 @@ UINT file_read(FILEH handle, void *data, UINT length) {
 
 UINT file_write(FILEH handle, const void *data, UINT length) {
 
+#if defined(__ANDROID__)	/* ANDROID-SAF */
+	UINT	ret;
+
+	ret = (UINT)fwrite(data, 1, length, handle);
+	if (ret != length) {
+		safio_ioerror(handle);
+	}
+	return(ret);
+#else
 	return((UINT)fwrite(data, 1, length, handle));
+#endif
 }
 
 short file_close(FILEH handle) {
@@ -88,6 +105,11 @@ short file_close(FILEH handle) {
 	 * Android: fclose の結果を返す。書き込みはバッファされるので、容量不足などの失敗は
 	 * close 時に初めて分かることが多い (safesave_commit で壊れたファイルに置き換えないため)。
 	 */
+#if defined(__ANDROID__)	/* ANDROID-SAF: fclose で失敗すると fd が分からなくなるので先に書き出す */
+	if ((__fwritable(handle)) && (fflush(handle) != 0)) {	/* 読み取り専用の fflush は EBADF になる */
+		safio_ioerror(handle);
+	}
+#endif
 	return((fclose(handle) == 0) ? 0 : -1);
 }
 

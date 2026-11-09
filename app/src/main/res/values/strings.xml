@@ -21,6 +21,8 @@
     <string name="disk_copy">コピーして使う</string>
     <string name="disk_not_found">ファイルが見つかりません: %1$s</string>
     <string name="disk_lost">見つからなくなったイメージを履歴から外しました: %1$s</string>
+    <string name="disk_hdd_readonly">このイメージは書き込み禁止で開きました。HDD への書き込みはエラーになります。</string>
+    <string name="disk_write_error">%1$s への書き込みに失敗しました。元の場所が使えなくなっていないか確認してください。</string>
     <string name="cancel">キャンセル</string>
     <string name="ok">OK</string>
 </resources>

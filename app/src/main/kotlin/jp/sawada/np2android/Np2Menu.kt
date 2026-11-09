@@ -26,15 +26,26 @@ class Np2Menu(private val ctx: Context, private val host: Host) {
         fun openFileManager()
     }
 
-    /** ディスクの挿入先 */
-    data class DiskTarget(val kind: DiskImages.Kind, val drive: Int, val label: String)
+    /**
+     * ディスクの挿入先。[extensions] はそのドライブで使える拡張子
+     * (np2 は SASI/IDE で thd・nhd・hdi、SCSI で hdd だけを受け付ける)。
+     */
+    data class DiskTarget(
+        val kind: DiskImages.Kind,
+        val drive: Int,
+        val label: String,
+        val extensions: Set<String> = kind.extensions,
+    ) {
+        fun accepts(name: String) = name.substringAfterLast('.', "").lowercase() in extensions
+    }
 
     private fun builder() = AlertDialog.Builder(ctx, android.R.style.Theme_DeviceDefault_Dialog_Alert)
 
     private val fdd1 = DiskTarget(DiskImages.Kind.FDD, 0, "FDD1")
     private val fdd2 = DiskTarget(DiskImages.Kind.FDD, 1, "FDD2")
-    private val hdd1 = DiskTarget(DiskImages.Kind.HDD, 0x00, "HDD1")
-    private val hdd2 = DiskTarget(DiskImages.Kind.HDD, 0x01, "HDD2")
+    private val hdd1 = DiskTarget(DiskImages.Kind.HDD, 0x00, "HDD1", SASI_EXTENSIONS)
+    private val hdd2 = DiskTarget(DiskImages.Kind.HDD, 0x01, "HDD2", SASI_EXTENSIONS)
+    private val scsi = (0..3).map { DiskTarget(DiskImages.Kind.HDD, 0x20 + it, "SCSI #$it", SCSI_EXTENSIONS) }
 
     fun show() {
         val items = listOf<Pair<String, () -> Unit>>(
@@ -42,6 +53,7 @@ class Np2Menu(private val ctx: Context, private val host: Host) {
             "FDD2: ${current(fdd2)}" to { diskMenu(fdd2) },
             "HDD1: ${current(hdd1)}" to { diskMenu(hdd1) },
             "HDD2: ${current(hdd2)}" to { diskMenu(hdd2) },
+            "SCSI HDD…" to { scsiMenu() },
             "ステートセーブ" to { slotMenu(save = true) },
             "ステートロード" to { slotMenu(save = false) },
             "リセット" to { confirm("リセットしますか？") { Np2Native.reset() } },
@@ -63,18 +75,23 @@ class Np2Menu(private val ctx: Context, private val host: Host) {
 
     // ---- ディスク ----
 
+    /** SCSI #0〜#3 (np2 内蔵メニューからディスク操作を外したので、こちらで設定する) */
+    private fun scsiMenu() {
+        builder()
+            .setTitle("SCSI HDD")
+            .setItems(scsi.map { "${it.label}: ${current(it)}" }.toTypedArray()) { _, i -> diskMenu(scsi[i]) }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
     private fun diskMenu(t: DiskTarget) {
-        // 直接オープン (SAF) は FDD から対応する。HDD はフェーズ4で対応
-        val direct = t.kind == DiskImages.Kind.FDD
         val items = mutableListOf<Pair<String, () -> Unit>>()
-        if (direct) items += ctx.getString(R.string.disk_open_direct) to { host.openDirect(t) }
+        items += ctx.getString(R.string.disk_open_direct) to { host.openDirect(t) }
         items += ctx.getString(R.string.disk_import_copy) to { host.importDisk(t) }
-        if (direct) {
-            for (e in DiskImageSource.recent(ctx, t.kind)) {
-                items += ctx.getString(R.string.disk_direct_suffix, e.name) to { host.insertRecent(t, e) }
-            }
+        for (e in DiskImageSource.recent(ctx, t.kind).filter { t.accepts(it.name) }) {
+            items += ctx.getString(R.string.disk_direct_suffix, e.name) to { host.insertRecent(t, e) }
         }
-        for (f in DiskImages.list(ctx, t.kind)) {
+        for (f in DiskImages.list(ctx, t.kind).filter { t.accepts(it.name) }) {
             items += f.name to { insert(t, f) }
         }
         if (current(t) != "(なし)") items += "取り出す" to { eject(t) }
@@ -94,7 +111,8 @@ class Np2Menu(private val ctx: Context, private val host: Host) {
                 t.label, entry.name))
         } else {
             Np2Native.setHdd(t.drive, path)
-            askReset("${t.label} を ${entry.name} に変更しました。")
+            askReset("${t.label} を ${entry.name} に変更しました。" +
+                    if (entry.readOnly) "\n" + ctx.getString(R.string.disk_hdd_readonly) else "")
         }
     }
 
@@ -168,6 +186,10 @@ class Np2Menu(private val ctx: Context, private val host: Host) {
             })
         }
 
+        override fun onDiskError(path: String) {
+            Toast.makeText(ctx, ctx.getString(R.string.disk_write_error, File(path).name), Toast.LENGTH_LONG).show()
+        }
+
         override fun onStateConflict(slot: Int, info: String) {
             builder()
                 .setTitle("ディスクがセーブ時と異なります")
@@ -192,5 +214,7 @@ class Np2Menu(private val ctx: Context, private val host: Host) {
 
     companion object {
         const val SLOTS = 4
+        val SASI_EXTENSIONS = setOf("thd", "nhd", "hdi")
+        val SCSI_EXTENSIONS = setOf("hdd")
     }
 }

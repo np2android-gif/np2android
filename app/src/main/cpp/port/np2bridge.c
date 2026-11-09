@@ -34,7 +34,8 @@ enum {
 	EV_STATE_SAVED		= 1,	/* a = slot, b = 0:成功 / 1:失敗 */
 	EV_STATE_LOADED		= 2,	/* a = slot, b = 0:成功 / 1:失敗(非互換) / 2:ファイル無し */
 	EV_STATE_CONFLICT	= 3,	/* a = slot, text = 差分情報 (force 付きで再ロードするか確認) */
-	EV_USER_EXIT		= 4		/* メニューから終了した (Activity 終了後にプロセスも終わらせてよい) */
+	EV_USER_EXIT		= 4,	/* メニューから終了した (Activity 終了後にプロセスも終わらせてよい) */
+	EV_DISK_ERROR		= 5		/* text = SAF の仮想パス。書き込みに失敗した */
 };
 
 static jclass		s_nativeClass;
@@ -414,6 +415,11 @@ static void stateload(int slot, BOOL force)
 	statsave_load(path);
 	__android_log_print(ANDROID_LOG_INFO, LOG_TAG, "state load slot %d: ok", slot);
 	notify(EV_STATE_LOADED, slot, 0, NULL);
+}
+
+void np2bridge_diskerror(const char *path)
+{
+	notify(EV_DISK_ERROR, 0, 0, path);
 }
 
 void np2bridge_onexit(void)

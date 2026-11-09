@@ -37,6 +37,9 @@ BOOL np2bridge_handle(const SDL_Event *e);
 /** np2_main 終了後に呼ぶ。ユーザー操作による終了なら Kotlin に通知する */
 void np2bridge_onexit(void);
 
+/** SAF で開いたイメージへの書き込みが失敗したことを Kotlin に通知する (エミュレータスレッドから呼ぶ) */
+void np2bridge_diskerror(const char *path);
+
 /** taskmng_exit() (メニューの終了) で止めたとき TRUE */
 extern BOOL taskmng_userexit;
 

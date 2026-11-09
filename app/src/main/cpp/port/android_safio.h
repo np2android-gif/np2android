@@ -55,6 +55,12 @@ FILE *safio_fopen(const char *path, const char *mode);
  */
 short safio_attr(const char *path);
 
+/**
+ * dosio.c の書き込み・シーク・クローズが失敗したときに呼ぶ。fp が仮想パスのエントリーなら
+ * ログに出し、Kotlin に通知する (エミュレータは止めない)。それ以外のファイルなら何もしない。
+ */
+void safio_ioerror(FILE *fp);
+
 /** 登録中の全 fd を fsync する (バックグラウンドへ移るとき用) */
 void safio_syncall(void);
 

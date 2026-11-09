@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
+import android.system.Os
 import android.util.Log
 import org.json.JSONArray
 import org.json.JSONObject
@@ -45,7 +46,10 @@ object DiskImageSource {
         data class Ok(val entry: Entry, val path: String) : Result()
         /** 拡張子が [kind] に合わない */
         data class Unsupported(val name: String) : Result()
-        /** パイプなどシークできない (クラウド系プロバイダー)。コピー方式なら使える */
+        /**
+         * パイプなどシークできない、または実体が端末のストレージに無い (クラウド系プロバイダーが
+         * 自分のキャッシュの fd を返す場合など、書き込みが元の場所に届かない)。コピー方式なら使える
+         */
         data class NotSeekable(val name: String) : Result()
         /** 権限が無い・ファイルが無い */
         data class NotFound(val name: String) : Result()
@@ -107,9 +111,10 @@ object DiskImageSource {
      * [flags] は結果の Intent の flags (永続権限として取れる範囲を判断する)。
      * ブロックすることがあるので、ワーカースレッドから呼ぶこと。
      */
-    fun openPicked(context: Context, uri: Uri, flags: Int, kind: DiskImages.Kind): Result {
+    fun openPicked(context: Context, uri: Uri, flags: Int, target: Np2Menu.DiskTarget): Result {
+        val kind = target.kind
         val name = queryName(context, uri)
-        if (!DiskImages.matches(kind, name)) return Result.Unsupported(name)
+        if (!target.accepts(name)) return Result.Unsupported(name)
 
         val cr = context.contentResolver
         val canWrite = (flags and Intent.FLAG_GRANT_WRITE_URI_PERMISSION) != 0
@@ -167,36 +172,56 @@ object DiskImageSource {
     }
 
     /**
-     * URI を開いてネイティブに登録する。"rw" で開けなければ "r" で開き直し、読み取り専用にする。
+     * URI を開いてネイティブに登録する。"rw" で開けなければ "r" のまま読み取り専用にする。
      * "w" は使わない (プロバイダーによっては中身を切り詰める)。
+     *
+     * 先に "r" で開いて、ファイルがあることを確かめる。DownloadsProvider の raw: URI などは
+     * ファイルが無いと "rw" で空のファイルを作ってしまうため (削除済みのイメージが 0 バイトで復活する)。
      */
     private fun register(context: Context, id: String, uri: Uri, name: String, kind: DiskImages.Kind): Result {
         val cr = context.contentResolver
+        val probe = try {
+            cr.openFileDescriptor(uri, "r")
+        } catch (e: Exception) {
+            Log.w(TAG, "open failed: $name (${e.javaClass.simpleName}: ${e.message})")
+            null
+        } ?: return Result.NotFound(name)
+
         var readOnly = false
         val pfd = try {
-            cr.openFileDescriptor(uri, "rw")
+            cr.openFileDescriptor(uri, "rw")?.also { probe.close() }
         } catch (e: Exception) {
             if (e is FileNotFoundException || e is SecurityException || e is UnsupportedOperationException ||
                 e is IllegalArgumentException) {
-                Log.i(TAG, "rw open failed, retry read-only: $name (${e.message})")
-                readOnly = true
-                try {
-                    cr.openFileDescriptor(uri, "r")
-                } catch (e2: Exception) {
-                    Log.w(TAG, "open failed: $name", e2)
-                    null
-                }
+                Log.i(TAG, "rw open failed, use read-only: $name (${e.message})")
             } else {
-                Log.w(TAG, "open failed: $name", e)
-                null
+                Log.w(TAG, "rw open failed, use read-only: $name", e)
             }
-        } ?: return Result.NotFound(name)
+            null
+        } ?: probe.also { readOnly = true }
 
-        val path = pfd.use { Np2Native.safRegister(id, name, it.fd, readOnly) }
-            ?: return Result.NotSeekable(name)
+        val path = pfd.use {
+            if (!isLocalStorage(it.fd, name)) return Result.NotSeekable(name)
+            Np2Native.safRegister(id, name, it.fd, readOnly)
+        } ?: return Result.NotSeekable(name)
         Log.i(TAG, "opened $uri as $path ro=$readOnly")
         return Result.Ok(Entry(id, uri, name, kind, readOnly, System.currentTimeMillis()), path)
     }
+
+    /**
+     * fd の実体が端末のストレージ (内部共有ストレージ・SD カード・USB ストレージ) にあるか。
+     * Google ドライブなどのクラウド系プロバイダーは、ダウンロードした自分のキャッシュファイルの fd を
+     * 返すことがある。シークできるので仮想パスとしては開けてしまうが、書き込みが元の場所に戻らない。
+     * 実体のパスはプロバイダーごとに決まっていないため、端末のストレージのパスかどうかで判断する。
+     */
+    private fun isLocalStorage(fd: Int, name: String): Boolean {
+        val real = runCatching { Os.readlink("/proc/self/fd/$fd") }.getOrNull()
+        val local = real != null && LOCAL_PREFIXES.any { real.startsWith(it) }
+        Log.i(TAG, "fd of $name -> $real (${if (local) "local" else "not local"})")
+        return local
+    }
+
+    private val LOCAL_PREFIXES = listOf("/storage/", "/mnt/", "/data/media/", "/sdcard/")
 
     private fun queryName(context: Context, uri: Uri): String {
         val n = runCatching {

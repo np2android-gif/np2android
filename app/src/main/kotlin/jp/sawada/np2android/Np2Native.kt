@@ -78,6 +78,8 @@ object Np2Native {
         fun onStateSaved(slot: Int, success: Boolean)
         fun onStateLoaded(slot: Int, result: Int)
         fun onStateConflict(slot: Int, info: String)
+        /** SAF で開いたイメージ ([path] は仮想パス) への書き込みが失敗した */
+        fun onDiskError(path: String)
     }
 
     /** UI スレッドで呼ばれる */
@@ -105,6 +107,7 @@ object Np2Native {
                 1 -> l.onStateSaved(a, b == 0)
                 2 -> l.onStateLoaded(a, b)
                 3 -> l.onStateConflict(a, text ?: "")
+                5 -> l.onDiskError(text ?: "")
             }
         }
     }
