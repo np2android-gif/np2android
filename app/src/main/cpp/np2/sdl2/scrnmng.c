@@ -86,7 +86,14 @@ BRESULT scrnmng_create(int width, int height) {
 		fprintf(stderr, "Error: SDL_Init: %s\n", SDL_GetError());
 		return(FAILURE);
 	}
-	s_sdlWindow = SDL_CreateWindow(app_name, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, width, height, 0);
+	/*
+	 * Android: 全画面のウィンドウとして作る。0 (全画面でない) だと SDL の Java 側が
+	 * FLAG_FORCE_NOT_FULLSCREEN を付け、Android 10 以前ではアプリ側でシステムバーを隠しても
+	 * ステータスバーが表示されたままになり、エミュレータ画面の上端と重なっていた
+	 * (Android 11 以降はこのフラグが無視されるので問題が出ない)。
+	 * Android では画面モードの切り替えは起きず、描画面の大きさも変わらない。
+	 */
+	s_sdlWindow = SDL_CreateWindow(app_name, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, width, height, SDL_WINDOW_FULLSCREEN_DESKTOP);
 	s_renderer = SDL_CreateRenderer(s_sdlWindow, -1, 0);
 	SDL_RenderSetLogicalSize(s_renderer, width, height);
 #if defined(SCREEN_BPP) && (SCREEN_BPP == 32)
