@@ -94,13 +94,12 @@ target_include_directories(main PRIVATE
 
 target_compile_definitions(main PRIVATE ${NP2_CPU_DEFINES})
 
-# 2012〜2016年頃のコードを現行 clang で通すための緩和
+# 2012〜2016年頃のコードの警告のうち、無害で量の多いものだけを抑える。
+# implicit-function-declaration / int-conversion / incompatible-pointer-types / implicit-int は
+# clang の既定どおりエラーのままにする (64bit で関数の戻り値やポインタが 32bit に切り詰められる
+# 種類のバグを、ビルド時に止めるため)。
 target_compile_options(main PRIVATE
     $<$<COMPILE_LANGUAGE:C>:-std=gnu99>
-    -Wno-error=implicit-function-declaration
-    -Wno-error=int-conversion
-    -Wno-error=incompatible-pointer-types
-    -Wno-error=implicit-int
     -Wno-deprecated-declarations
     -Wno-parentheses
     -Wno-dangling-else

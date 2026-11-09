@@ -12,6 +12,7 @@
 #include "keystat.h"
 #include "pccore.h"
 #include "statsave.h"
+#include "safesave.h"
 #include "fdd/diskdrv.h"
 #include "vramhdl.h"
 #include "menubase.h"
@@ -296,10 +297,8 @@ static void statesave(int slot)
 	int ret;
 
 	statefilename(path, sizeof(path), slot);
-	ret = statsave_save(path);
-	if (ret) {
-		file_delete(path);
-	}
+	/* 失敗しても (途中で止められても) 前のセーブは残す */
+	ret = safesave_statsave(path);
 	__android_log_print(ret ? ANDROID_LOG_ERROR : ANDROID_LOG_INFO, LOG_TAG,
 						"state save slot %d: %s", slot, ret ? "failed" : "ok");
 	notify(EV_STATE_SAVED, slot, ret ? 1 : 0, NULL);

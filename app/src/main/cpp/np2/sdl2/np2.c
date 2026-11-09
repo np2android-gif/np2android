@@ -22,6 +22,7 @@
 #include	"vramhdl.h"
 #include	"menubase.h"
 #include	"sysmenu.h"
+#include	"safesave.h"
 
 
 		NP2OSCFG	np2oscfg = {0, 0, 0, 0, 0};
@@ -52,11 +53,20 @@ static int flagsave(const char *ext) {
 	char	path[MAX_PATH];
 
 	getstatfilename(path, ext, sizeof(path));
-	ret = statsave_save(path);
-	if (ret) {
-		file_delete(path);
-	}
+	/* Android: 一時ファイルに書いてから置き換える (途中で止められても前のレジュームが残る) */
+	ret = safesave_statsave(path);
 	return(ret);
+}
+
+/*
+ * Android: バックグラウンドへ移るとき (port/taskmng.c から) 呼ぶ。
+ * Android はバックグラウンドのアプリを予告なく止めることがあり、終了時の保存は当てにできない。
+ */
+void np2_saveresume(void) {
+
+	if (np2oscfg.resume) {
+		flagsave(str_sav);
+	}
 }
 
 static void flagdelete(const char *ext) {

@@ -16,6 +16,7 @@ BRESULT pcmmix_regist(PMIXDAT *dat, void *datptr, UINT datsize, UINT rate) {
 	UINT	r;
 	SINT16	*buf;
 
+	buf = NULL;
 	gs = getsnd_create(datptr, datsize);
 	if (gs == NULL) {
 		goto pmr_err1;
@@ -54,6 +55,10 @@ pmr_err2:
 	getsnd_destroy(gs);
 
 pmr_err1:
+	/* 元は buf を確保した後に失敗すると buf がリークしていた */
+	if (buf) {
+		_MFREE(buf);
+	}
 	return(FAILURE);
 }
 

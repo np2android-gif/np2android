@@ -84,7 +84,11 @@ UINT soundmng_create(UINT rate, UINT ms) {
 	fmt.callback = sound_play_cb;
 	if (SDL_OpenAudio(&fmt, NULL) < 0) {
 		fprintf(stderr, "Error: SDL_OpenAudio: %s\n", SDL_GetError());
-		return(FAILURE);
+		/*
+		 * 戻り値はサンプル数で、0 が失敗。以前は FAILURE (=1) を返していたため
+		 * 「サンプル数 1 で成功」と扱われ、音が出ないまま合成処理だけが続き、バッファもリークしていた。
+		 */
+		goto smcre_err2;
 	}
 #if defined(VERMOUTH_LIB)
 	cmvermouth_load(rate);

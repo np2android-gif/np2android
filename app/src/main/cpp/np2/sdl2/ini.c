@@ -5,6 +5,7 @@
 #include	"dosio.h"
 #include	"ini.h"
 #include	"pccore.h"
+#include	"safesave.h"
 
 
 typedef struct {
@@ -192,7 +193,15 @@ static void iniwrsetarg8(char *work, int size, const UINT8 *ptr, int arg) {
 	}
 }
 
-void ini_write(const char *path, const char *title,
+/* Android: 書き込みの成否を返す (initsave で壊れたファイルに置き換えないため) */
+static void iniwr(FILEH fh, const char *str, UINT leng, BOOL *ok) {
+
+	if (file_write(fh, str, leng) != leng) {
+		*ok = FALSE;
+	}
+}
+
+BRESULT ini_write(const char *path, const char *title,
 											const INITBL *tbl, UINT count) {
 
 	FILEH		fh;
@@ -200,15 +209,17 @@ const INITBL	*p;
 const INITBL	*pterm;
 	BRESULT		set;
 	char		work[512];
+	BOOL		ok;
 
 	fh = file_create(path);
 	if (fh == FILEH_INVALID) {
-		return;
+		return(FAILURE);
 	}
+	ok = TRUE;
 	milstr_ncpy(work, "[", sizeof(work));
 	milstr_ncat(work, title, sizeof(work));
 	milstr_ncat(work, "]\r\n", sizeof(work));
-	file_write(fh, work, (UINT)strlen(work));
+	iniwr(fh, work, (UINT)strlen(work), &ok);
 
 	p = tbl;
 	pterm = tbl + count;
@@ -270,14 +281,17 @@ const INITBL	*pterm;
 				break;
 		}
 		if (set == SUCCESS) {
-			file_write(fh, p->item, (UINT)strlen(p->item));
-			file_write(fh, "=", 1);
-			file_write(fh, work, (UINT)strlen(work));
-			file_write(fh, "\r\n", 2);
+			iniwr(fh, p->item, (UINT)strlen(p->item), &ok);
+			iniwr(fh, "=", 1, &ok);
+			iniwr(fh, work, (UINT)strlen(work), &ok);
+			iniwr(fh, "\r\n", 2, &ok);
 		}
 		p++;
 	}
-	file_close(fh);
+	if (file_close(fh) != 0) {
+		ok = FALSE;
+	}
+	return((ok) ? SUCCESS : FAILURE);
 }
 
 
@@ -377,8 +391,13 @@ void initload(void) {
 void initsave(void) {
 
 	char	path[MAX_PATH];
+	char	tmp[MAX_PATH + 8];
+	BRESULT	r;
 
 	milstr_ncpy(path, file_getcd(inifile), sizeof(path));
-	ini_write(path, ini_title, iniitem, INIITEMS);
+	/* Android: 一時ファイルに書いてから置き換える (書き込み中に止められても np2.cfg が壊れない) */
+	safesave_tmpname(tmp, sizeof(tmp), path);
+	r = ini_write(tmp, ini_title, iniitem, INIITEMS);
+	safesave_commit(tmp, path, (r == SUCCESS));
 }
 

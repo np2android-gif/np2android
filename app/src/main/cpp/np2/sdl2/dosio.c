@@ -66,8 +66,11 @@ UINT file_write(FILEH handle, const void *data, UINT length) {
 
 short file_close(FILEH handle) {
 
-	fclose(handle);
-	return(0);
+	/*
+	 * Android: fclose の結果を返す。書き込みはバッファされるので、容量不足などの失敗は
+	 * close 時に初めて分かることが多い (safesave_commit で壊れたファイルに置き換えないため)。
+	 */
+	return((fclose(handle) == 0) ? 0 : -1);
 }
 
 UINT file_getsize(FILEH handle) {

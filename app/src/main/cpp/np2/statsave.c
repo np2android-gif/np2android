@@ -330,13 +330,20 @@ sfw_err1:
 	return(STATFLAG_FAILURE);
 }
 
-static void statflag_close(SFFILEH sffh) {
+/* Android: 最後のセクションの書き込みと close の成否を返す (statsave_save で使う) */
+static int statflag_close(SFFILEH sffh) {
 
+	int		ret;
+
+	ret = STATFLAG_SUCCESS;
 	if (sffh) {
-		statflag_closesection(sffh);
-		file_close(sffh->fh);
+		ret |= statflag_closesection(sffh);
+		if (file_close(sffh->fh) != 0) {
+			ret = STATFLAG_FAILURE;
+		}
 		_MFREE(sffh);
 	}
+	return(ret);
 }
 
 void statflag_seterr(STFLAGH sfh, const OEMCHAR *str) {
@@ -1270,7 +1277,7 @@ const SFENTRY	*tblterm;
 		}
 		tbl++;
 	}
-	statflag_close(sffh);
+	ret |= statflag_close(sffh);
 	return(ret);
 }
 

@@ -61,7 +61,7 @@ UINT bmpdata_setinfo(BMPINFO *bi, const BMPDATA *inf) {
 	UINT	tmp;
 
 	ret = 0;
-	if ((bi == NULL) && (inf == NULL)) {
+	if ((bi == NULL) || (inf == NULL)) {	/* 元は && で、片方だけ NULL のとき落ちた */
 		goto bdsi_exit;
 	}
 	ZeroMemory(bi, sizeof(BMPINFO));

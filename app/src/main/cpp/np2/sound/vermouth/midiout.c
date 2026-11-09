@@ -1222,7 +1222,7 @@ VEXTERN void VEXPORT midiout_setgain(MIDIHDL hdl, int gain) {
 
 	if (hdl) {
 		if (gain < -16) {
-			gain = 16;
+			gain = -16;		/* 元は 16 で、gaintbl[] の範囲外を読んでいた */
 		}
 		else if (gain > 8) {
 			gain = 8;

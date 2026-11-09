@@ -23,3 +23,6 @@ enum {
 extern	NP2OSCFG	np2oscfg;
 
 extern int np2_main(int argc, char *argv[]);
+
+/** Android: レジューム有効ならレジュームファイルを保存する (バックグラウンドへ移るとき用) */
+extern void np2_saveresume(void);

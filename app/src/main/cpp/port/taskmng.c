@@ -22,6 +22,7 @@
 #include "mousemng.h"
 #include "np2bridge.h"
 #include "scrndraw.h"
+#include "np2.h"
 
 	BOOL	task_avail;
 
@@ -366,6 +367,16 @@ void taskmng_rol(void) {
 					redraw_request();
 					break;
 			}
+			break;
+
+		case SDL_APP_DIDENTERBACKGROUND:
+			/*
+			 * バックグラウンドへ移った。Android はこの後プロセスを予告なく止めることがあり
+			 * np2_main 終了時のレジューム保存は当てにできないので、ここで保存しておく。
+			 * SDL はこのイベントをアプリが受け取るまでスレッドを止めない (SDL_androidevents.c) ので、
+			 * ここでの保存は止められる前に必ず終わる。
+			 */
+			np2_saveresume();
 			break;
 
 		case SDL_QUIT:

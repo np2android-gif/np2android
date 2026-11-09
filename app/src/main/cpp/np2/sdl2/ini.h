@@ -29,7 +29,7 @@ extern "C" {
 
 void ini_read(const char *path, const char *title,
 											const INITBL *tbl, UINT count);
-void ini_write(const char *path, const char *title,
+BRESULT ini_write(const char *path, const char *title,
 											const INITBL *tbl, UINT count);
 
 void initload(void);
