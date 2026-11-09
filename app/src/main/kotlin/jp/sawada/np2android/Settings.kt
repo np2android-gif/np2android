@@ -49,6 +49,11 @@ class Settings(context: Context) {
         get() = prefs.getInt("orientation", ORIENTATION_AUTO)
         set(v) = prefs.edit().putInt("orientation", v).apply()
 
+    /** 「ファイル管理」の注意書きを表示済みか */
+    var fileManagerNoticeShown: Boolean
+        get() = prefs.getBoolean("file_manager_notice_shown", false)
+        set(v) = prefs.edit().putBoolean("file_manager_notice_shown", v).apply()
+
     companion object {
         const val ORIENTATION_AUTO = 0
         const val ORIENTATION_LANDSCAPE = 1

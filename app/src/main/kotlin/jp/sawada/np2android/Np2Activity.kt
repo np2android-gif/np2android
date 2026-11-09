@@ -1,7 +1,9 @@
 package jp.sawada.np2android
 
 import android.app.AlertDialog
+import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.provider.DocumentsContract
 import android.content.pm.ActivityInfo
 import android.media.AudioManager
 import android.util.SparseIntArray
@@ -66,6 +68,7 @@ class Np2Activity : SDLActivity(), KeyboardController.Actions, Np2Menu.Host, Set
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (mBrokenLibraries) return
+        Np2Native.loaded = true
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             // 予測型「戻る」(targetSdk 36+ で既定) では onBackPressed が呼ばれないため、こちらで受ける
@@ -231,6 +234,59 @@ class Np2Activity : SDLActivity(), KeyboardController.Actions, Np2Menu.Host, Set
     }
 
     private fun dialog() = AlertDialog.Builder(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+
+    // ---- ファイル管理 (ドキュメントプロバイダー) -----------------------------
+
+    /**
+     * 作業フォルダをシステムのファイル画面 (DocumentsUI) で開く。
+     * Android 11 以降はファイル画面がランチャーに出ていない端末があるので、メニューから開けるようにする。
+     * 開き方は端末・バージョンで受け付けるものが違うため、順に試す。
+     */
+    override fun openFileManager() {
+        // ファイル画面は各ファイルの説明欄を表示しないので、注意点は初回だけここで案内する
+        if (!settings.fileManagerNoticeShown) {
+            dialog()
+                .setTitle("ファイル管理")
+                .setMessage("作業フォルダを端末の「ファイル」画面で開きます。\n\n" +
+                        "・np2.cfg を編集した内容は、次にアプリを起動したときに反映されます。" +
+                        "それまでにメニューで設定を変えると、編集した内容は上書きされます。" +
+                        "編集する前にアプリを終了しておくのが確実です。\n\n" +
+                        "・使用中のディスクイメージは、書き込み・削除・名前の変更・移動ができません。" +
+                        "取り出すか、アプリを終了してから操作してください。")
+                .setPositiveButton("開く") { _, _ ->
+                    settings.fileManagerNoticeShown = true
+                    startFileManager()
+                }
+                .setNegativeButton("キャンセル", null)
+                .show()
+            return
+        }
+        startFileManager()
+    }
+
+    private fun startFileManager() {
+        val auth = Np2DocumentsProvider.AUTHORITY
+        val root = Np2DocumentsProvider.ROOT_ID
+        val intents = listOf(
+            Intent(Intent.ACTION_VIEW)
+                .setDataAndType(DocumentsContract.buildRootUri(auth, root), DocumentsContract.Root.MIME_TYPE_ITEM),
+            Intent(Intent.ACTION_VIEW)
+                .setDataAndType(DocumentsContract.buildDocumentUri(auth, root), DocumentsContract.Document.MIME_TYPE_DIR),
+        )
+        for (intent in intents) {
+            try {
+                startActivity(intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+                return
+            } catch (e: ActivityNotFoundException) {
+                Log.i(TAG, "file manager: not handled: ${intent.data} ${intent.type}")
+            }
+        }
+        dialog()
+            .setTitle("ファイル管理を開けません")
+            .setMessage("端末の「ファイル」アプリで「${getString(R.string.app_name)}」を開いてください。")
+            .setPositiveButton("OK", null)
+            .show()
+    }
 
     // ---- ソフトキーボード ---------------------------------------------------
 

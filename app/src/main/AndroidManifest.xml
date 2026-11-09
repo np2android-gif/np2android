@@ -30,6 +30,19 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- 作業フォルダを「ファイル」アプリ等に公開する。MANAGE_DOCUMENTS はシステムのファイル画面だけが持つ権限で、
+             他のアプリはユーザーが選んだファイルにだけアクセスできる -->
+        <provider
+            android:name=".Np2DocumentsProvider"
+            android:authorities="${applicationId}.documents"
+            android:exported="true"
+            android:grantUriPermissions="true"
+            android:permission="android.permission.MANAGE_DOCUMENTS">
+            <intent-filter>
+                <action android:name="android.content.action.DOCUMENTS_PROVIDER" />
+            </intent-filter>
+        </provider>
     </application>
 
 </manifest>

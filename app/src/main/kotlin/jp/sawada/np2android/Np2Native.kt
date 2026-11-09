@@ -34,6 +34,14 @@ object Np2Native {
     /** 現在のディスクのパス (表示用。未挿入なら null) */
     @JvmStatic external fun getFdd(drive: Int): String?
     @JvmStatic external fun getHdd(drive: Int): String?
+    /** 使用中 (またはリセット後に使う) ディスクイメージのパス。要素は null のことがある */
+    @JvmStatic external fun getDisksInUse(): Array<String?>?
+
+    /**
+     * libmain.so がロード済みか。ドキュメントプロバイダーは Activity なしでプロセスが起動することがあり、
+     * そのときに external 関数を呼ぶと落ちるため、これを見てから呼ぶ。
+     */
+    @Volatile var loaded = false
 
     // ---- 本体操作 ----
     @JvmStatic external fun toggleMenu()

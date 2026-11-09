@@ -18,6 +18,8 @@ class Np2Menu(private val ctx: Context, private val host: Host) {
         /** SAF で端末内のファイルを選び、取り込み後に [target] へ挿入する */
         fun importDisk(target: DiskTarget)
         fun openSettings()
+        /** 作業フォルダをシステムのファイル画面で開く */
+        fun openFileManager()
     }
 
     /** ディスクの挿入先 */
@@ -40,6 +42,7 @@ class Np2Menu(private val ctx: Context, private val host: Host) {
             "ステートロード" to { slotMenu(save = false) },
             "リセット" to { confirm("リセットしますか？") { Np2Native.reset() } },
             "詳細設定 (np2 内蔵メニュー)" to { Np2Native.toggleMenu() },
+            "ファイル管理" to { host.openFileManager() },
             "設定" to { host.openSettings() },
             "終了" to { confirm("Neko Project II を終了しますか？") { Np2Native.exit() } },
         )

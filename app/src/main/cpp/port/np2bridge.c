@@ -20,6 +20,7 @@
 #include "taskmng.h"
 
 #include "fdd/fddfile.h"
+#include "fdd/sxsi.h"
 
 #define LOG_TAG "np2"
 
@@ -279,6 +280,54 @@ JNIEXPORT jstring JNICALL Java_jp_sawada_np2android_Np2Native_getHdd(JNIEnv *env
 	}
 	SDL_strlcpy(buf, name, sizeof(buf));
 	return newstring(env, buf);
+}
+
+/*
+ * ドキュメントプロバイダー用: エミュレータが使っている (またはリセット後に使う) ディスクイメージのパス。
+ * 上書きや削除で壊さないよう、プロバイダーはこれらへの書き込みを拒否する。
+ * HDD は「実際に開いているファイル」と「np2.cfg 上の設定 (リセット後に開く)」の両方を返す。
+ */
+JNIEXPORT jobjectArray JNICALL Java_jp_sawada_np2android_Np2Native_getDisksInUse(JNIEnv *env, jclass cls)
+{
+	static const REG8 hdds[] = {0x00, 0x01, 0x20, 0x21, 0x22, 0x23};
+	const char *names[4 + 2 * (sizeof(hdds) / sizeof(hdds[0]))];
+	char buf[MAX_PATH];
+	jclass strcls;
+	jobjectArray ret;
+	jstring s;
+	int n = 0;
+	int i;
+
+	for (i = 0; i < 4; i++) {
+		if (fdd_diskready((REG8)i)) {
+			names[n++] = fdd_diskname((REG8)i);
+		}
+	}
+	for (i = 0; i < (int)(sizeof(hdds) / sizeof(hdds[0])); i++) {
+		names[n++] = sxsi_getfilename(hdds[i]);
+		names[n++] = diskdrv_getsxsi(hdds[i]);
+	}
+
+	strcls = (*env)->FindClass(env, "java/lang/String");
+	if (strcls == NULL) {
+		return NULL;
+	}
+	ret = (*env)->NewObjectArray(env, n, strcls, NULL);
+	if (ret == NULL) {
+		return NULL;
+	}
+	for (i = 0; i < n; i++) {
+		if ((names[i] == NULL) || (names[i][0] == '\0')) {
+			continue;
+		}
+		SDL_strlcpy(buf, names[i], sizeof(buf));
+		s = newstring(env, buf);
+		if (s != NULL) {
+			(*env)->SetObjectArrayElement(env, ret, i, s);
+			(*env)->DeleteLocalRef(env, s);
+		}
+	}
+	return ret;
 }
 
 /* ---- エミュレータスレッド側 ------------------------------------------- */
