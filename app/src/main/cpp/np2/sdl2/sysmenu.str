@@ -97,11 +97,14 @@ static const MSYSITEM s_emu[] = {
 		{str_reset,			NULL,		MID_RESET,			0},
 		{NULL,				NULL,		MID_STATIC,			MENU_SEPARATOR},
 		{str_config,		NULL,		MID_CONFIG,			0},
+#if !defined(__ANDROID__)	/* ANDROID-SAF */
 		{str_newdisk,		NULL,		MID_NEWDISK,		MENU_GRAY},
+#endif
 		{str_font,			NULL,		MID_CHANGEFONT,		MENU_GRAY},
 		{NULL,				NULL,		MID_STATIC,			MENU_SEPARATOR},
 		{str_exit,			NULL,		MID_EXIT,			MENU_DELETED}};
 
+#if !defined(__ANDROID__)	/* ANDROID-SAF: ディスク操作は Kotlin のメニューだけで行う */
 static const MSYSITEM s_fdd1[] = {
 		{str_open,			NULL,		MID_FDD1OPEN,		0},
 		{NULL,				NULL,		MID_STATIC,			MENU_SEPARATOR},
@@ -161,6 +164,7 @@ static const MSYSITEM s_hdd[] = {
 		{str_sasi1,			s_sasi1,	MID_STATIC,			0},
 		{str_sasi2,			s_sasi2,	MID_STATIC,			MENU_DELETED}};
 #endif
+#endif	/* !__ANDROID__ */
 
 static const MSYSITEM s_screen[] = {
 		{str_window,		NULL,		MID_WINDOW,			MENU_GRAY},
@@ -260,9 +264,11 @@ static const MSYSITEM s_other[] = {
 
 static const MSYSITEM s_main[] = {
 		{str_emulate,		s_emu,		MID_STATIC,			0},
+#if !defined(__ANDROID__)	/* ANDROID-SAF: ディスク操作は Kotlin のメニューだけで行う */
 		{str_fdd1,			s_fdd1,		MID_STATIC,			0},
 		{str_fdd2,			s_fdd2,		MID_STATIC,			0},
 		{str_harddisk,		s_hdd,		MID_STATIC,			0},
+#endif
 		{str_screen,		s_screen,	MID_STATIC,			0},
 		{str_device,		s_device,	MID_STATIC,			0},
 		{str_other,			s_other,	MID_STATIC,			MENU_DELETED}};

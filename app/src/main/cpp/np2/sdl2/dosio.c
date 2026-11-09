@@ -5,6 +5,9 @@
 #include "codecnv/codecnv.h"
 #endif
 #include "dosio.h"
+#if defined(__ANDROID__)	/* ANDROID-SAF */
+#include "android_safio.h"
+#endif
 #if defined(WIN32)
 #include <direct.h>
 #else
@@ -17,6 +20,11 @@ static	char	*curfilep = curpath + 2;
 /* ファイル操作 */
 FILEH file_open(const char *path) {
 
+#if defined(__ANDROID__)	/* ANDROID-SAF */
+	if (safio_isvirtual(path)) {
+		return(safio_fopen(path, "rb+"));
+	}
+#endif
 #if defined(WIN32) && defined(OSLANG_UTF8)
 	char	sjis[MAX_PATH];
 	codecnv_utf8tosjis(sjis, sizeof(sjis), path, (UINT)-1);
@@ -28,6 +36,11 @@ FILEH file_open(const char *path) {
 
 FILEH file_open_rb(const char *path) {
 
+#if defined(__ANDROID__)	/* ANDROID-SAF */
+	if (safio_isvirtual(path)) {
+		return(safio_fopen(path, "rb"));
+	}
+#endif
 #if defined(WIN32) && defined(OSLANG_UTF8)
 	char	sjis[MAX_PATH];
 	codecnv_utf8tosjis(sjis, sizeof(sjis), path, (UINT)-1);
@@ -39,6 +52,11 @@ FILEH file_open_rb(const char *path) {
 
 FILEH file_create(const char *path) {
 
+#if defined(__ANDROID__)	/* ANDROID-SAF: 仮想パスには新規作成しない */
+	if (safio_isvirtual(path)) {
+		return(FILEH_INVALID);
+	}
+#endif
 #if defined(WIN32) && defined(OSLANG_UTF8)
 	char	sjis[MAX_PATH];
 	codecnv_utf8tosjis(sjis, sizeof(sjis), path, (UINT)-1);
@@ -89,6 +107,11 @@ short file_attr(const char *path) {
 struct stat	sb;
 	short	attr;
 
+#if defined(__ANDROID__)	/* ANDROID-SAF */
+	if (safio_isvirtual(path)) {
+		return(safio_attr(path));
+	}
+#endif
 #if defined(WIN32) && defined(OSLANG_UTF8)
 	char	sjis[MAX_PATH];
 	codecnv_utf8tosjis(sjis, sizeof(sjis), path, (UINT)-1);
@@ -156,6 +179,11 @@ struct stat sb;
 
 short file_delete(const char *path) {
 
+#if defined(__ANDROID__)	/* ANDROID-SAF: 元のファイルは消さない */
+	if (safio_isvirtual(path)) {
+		return(-1);
+	}
+#endif
 	return(remove(path));
 }
 

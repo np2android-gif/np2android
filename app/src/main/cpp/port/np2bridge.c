@@ -18,6 +18,7 @@
 #include "menubase.h"
 #include "sysmenu.h"
 #include "taskmng.h"
+#include "android_safio.h"
 
 #include "fdd/fddfile.h"
 #include "fdd/sxsi.h"
@@ -212,6 +213,40 @@ NP2JNI(setFdd)(JNIEnv *env, jclass cls, jint drive, jstring path)
 NP2JNI(setHdd)(JNIEnv *env, jclass cls, jint drive, jstring path)
 {
 	push(NP2CMD_SETHDD, drive, (intptr_t)dupstring(env, path));
+}
+
+/*
+ * SAF の fd を仮想パスとして登録する (android_safio.h)。fd は C 側で dup するので、
+ * 呼び出し後に Kotlin 側で ParcelFileDescriptor を閉じてよい。
+ * 戻り値の仮想パスを setFdd / setHdd に渡す。失敗したら null。
+ */
+JNIEXPORT jstring JNICALL Java_jp_sawada_np2android_Np2Native_safRegister(JNIEnv *env, jclass cls,
+								jstring id, jstring name, jint fd, jboolean readOnly)
+{
+	char *cid;
+	char *cname;
+	char path[MAX_PATH];
+	BRESULT r;
+
+	cid = dupstring(env, id);
+	cname = dupstring(env, name);
+	r = FAILURE;
+	if ((cid != NULL) && (cname != NULL)) {
+		r = safio_register(cid, cname, fd, readOnly ? TRUE : FALSE, path, sizeof(path));
+	}
+	SDL_free(cid);
+	SDL_free(cname);
+	return (r == SUCCESS) ? newstring(env, path) : NULL;
+}
+
+/* 登録を解除する。使用中のドライブがあれば、その後の読み書きは失敗する */
+NP2JNI(safUnregister)(JNIEnv *env, jclass cls, jstring id)
+{
+	char *cid;
+
+	cid = dupstring(env, id);
+	safio_unregister(cid);
+	SDL_free(cid);
 }
 
 NP2JNI(toggleMenu)(JNIEnv *env, jclass cls)

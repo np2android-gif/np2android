@@ -61,6 +61,7 @@ class Np2Activity : SDLActivity(), KeyboardController.Actions, Np2Menu.Host, Set
 
     /** SAF の結果を受け取るまでの挿入先 */
     private var pendingImport: Np2Menu.DiskTarget? = null
+    private var pendingDirect: Np2Menu.DiskTarget? = null
 
     /** libSDL2.so → libmain.so の順にロードする。 */
     override fun getLibraries(): Array<String> = arrayOf("SDL2", "main")
@@ -69,6 +70,10 @@ class Np2Activity : SDLActivity(), KeyboardController.Actions, Np2Menu.Host, Set
         super.onCreate(savedInstanceState)
         if (mBrokenLibraries) return
         Np2Native.loaded = true
+        // 直接オープンの履歴を、エミュレータスレッドが動き出す前に登録する
+        // (レジュームファイルや np2.cfg に残った仮想パスを、起動直後のレジュームで開けるように)
+        val lost = DiskImageSource.registerAll(this)
+        if (lost.isNotEmpty()) menu.toast(getString(R.string.disk_lost, lost.joinToString(", ")))
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             // 予測型「戻る」(targetSdk 36+ で既定) では onBackPressed が呼ばれないため、こちらで受ける
@@ -166,12 +171,23 @@ class Np2Activity : SDLActivity(), KeyboardController.Actions, Np2Menu.Host, Set
             data?.data?.takeIf { resultCode == RESULT_OK }?.let { onKeymapPicked(it) }
             return
         }
+        if (requestCode == REQUEST_OPEN_DIRECT) {
+            val target = pendingDirect ?: return
+            pendingDirect = null
+            val uri = data?.data ?: return
+            if (resultCode == RESULT_OK) onDirectPicked(target, uri, data.flags)
+            return
+        }
         if (requestCode != REQUEST_IMPORT) return
         val target = pendingImport ?: return
         pendingImport = null
         val uri = data?.data ?: return
         if (resultCode != RESULT_OK) return
+        importPicked(target, uri)
+    }
 
+    /** SAF で選ばれた [uri] を作業フォルダにコピーして [target] へ挿入する */
+    private fun importPicked(target: Np2Menu.DiskTarget, uri: Uri) {
         val name = DiskImages.sanitize(DiskImages.displayName(this, uri) ?: uri.lastPathSegment ?: "disk")
         if (!DiskImages.matches(target.kind, name)) {
             dialog()
@@ -230,6 +246,90 @@ class Np2Activity : SDLActivity(), KeyboardController.Actions, Np2Menu.Host, Set
                     menu.toast("取り込みに失敗しました: ${error.message}")
                 }
             }
+        }
+    }
+
+    // ---- ディスクの直接オープン (SAF) ---------------------------------------
+
+    override fun openDirect(target: Np2Menu.DiskTarget) {
+        pendingDirect = target
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT)
+            .addCategory(Intent.CATEGORY_OPENABLE)
+            .setType("*/*")   // PC-98 のイメージには標準の MIME が無い。拡張子で判定する
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
+                    Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+        @Suppress("DEPRECATION")
+        startActivityForResult(intent, REQUEST_OPEN_DIRECT)
+    }
+
+    override fun insertRecent(target: Np2Menu.DiskTarget, entry: DiskImageSource.Entry) {
+        pendingCopyUri = null
+        openInBackground(entry.name, target) { DiskImageSource.reopen(this, entry) }
+    }
+
+    private fun onDirectPicked(target: Np2Menu.DiskTarget, uri: Uri, flags: Int) {
+        val name = DiskImages.displayName(this, uri) ?: uri.lastPathSegment ?: "disk"
+        pendingCopyUri = uri
+        openInBackground(name, target) { DiskImageSource.openPicked(this, uri, flags, target.kind) }
+    }
+
+    /** 直接開けなかったときに、コピー方式に切り替えるための URI */
+    private var pendingCopyUri: Uri? = null
+
+    /**
+     * URI を開く処理はプロバイダーによってはブロックするので、ワーカースレッドで行い、
+     * 少し時間がかかる場合だけ進行表示を出す。
+     */
+    private fun openInBackground(name: String, target: Np2Menu.DiskTarget, open: () -> DiskImageSource.Result) {
+        val text = TextView(this).apply { text = getString(R.string.disk_opening, name) }
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            val pad = (20 * resources.displayMetrics.density).toInt()
+            setPadding(pad, pad, pad, pad)
+            addView(ProgressBar(this@Np2Activity))
+            addView(text, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
+                .apply { marginStart = pad })
+        }
+        val progress = dialog().setView(box).setCancelable(false).create()
+        val showProgress = Runnable { progress.show() }
+        mLayout?.postDelayed(showProgress, 300)
+
+        thread(name = "disk-open") {
+            val result = runCatching(open).getOrElse {
+                Log.e(TAG, "open failed: $name", it)
+                DiskImageSource.Result.NotFound(name)
+            }
+            runOnUiThread {
+                mLayout?.removeCallbacks(showProgress)
+                if (progress.isShowing) progress.dismiss()
+                onOpenResult(target, result)
+            }
+        }
+    }
+
+    private fun onOpenResult(target: Np2Menu.DiskTarget, result: DiskImageSource.Result) {
+        val copyUri = pendingCopyUri
+        pendingCopyUri = null
+        when (result) {
+            is DiskImageSource.Result.Ok -> menu.insertDirect(target, result.entry, result.path)
+            is DiskImageSource.Result.Unsupported -> dialog()
+                .setTitle(R.string.disk_unsupported_title)
+                .setMessage(getString(R.string.disk_unsupported_message, result.name, target.label,
+                    target.kind.extensions.sorted().joinToString(" ")))
+                .setPositiveButton(R.string.ok, null)
+                .show()
+            is DiskImageSource.Result.NotSeekable -> {
+                val b = dialog()
+                    .setTitle(R.string.disk_not_seekable_title)
+                    .setMessage(getString(R.string.disk_not_seekable_message, result.name))
+                    .setNegativeButton(R.string.cancel, null)
+                if (copyUri != null) {
+                    b.setPositiveButton(R.string.disk_copy) { _, _ -> importPicked(target, copyUri) }
+                }
+                b.show()
+            }
+            is DiskImageSource.Result.NotFound -> menu.toast(getString(R.string.disk_not_found, result.name))
         }
     }
 
@@ -602,6 +702,7 @@ class Np2Activity : SDLActivity(), KeyboardController.Actions, Np2Menu.Host, Set
         private const val TAG = "np2ui"
         private const val REQUEST_IMPORT = 1001
         private const val REQUEST_KEYMAP = 1002
+        private const val REQUEST_OPEN_DIRECT = 1003
         /** keymap ファイルの読み込み上限 (旧版の表は数 KB) */
         private const val MAX_KEYMAP_BYTES = 64 * 1024
         /**

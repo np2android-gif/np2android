@@ -34,6 +34,14 @@ object Np2Native {
     /** 現在のディスクのパス (表示用。未挿入なら null) */
     @JvmStatic external fun getFdd(drive: Int): String?
     @JvmStatic external fun getHdd(drive: Int): String?
+    /**
+     * SAF で開いた fd を仮想パス "saf:/<id>/<name>" として登録する。fd はネイティブ側で dup するので、
+     * 呼び出し後に ParcelFileDescriptor を閉じてよい。戻り値を [setFdd] / [setHdd] に渡す。
+     * id は履歴が持つ固定の ID (英数字・'-'・'_')。シークできない fd などで失敗したら null。
+     */
+    @JvmStatic external fun safRegister(id: String, name: String, fd: Int, readOnly: Boolean): String?
+    /** 登録を解除する。使用中のドライブがあると、その後の読み書きは失敗する */
+    @JvmStatic external fun safUnregister(id: String)
     /** 使用中 (またはリセット後に使う) ディスクイメージのパス。要素は null のことがある */
     @JvmStatic external fun getDisksInUse(): Array<String?>?
 

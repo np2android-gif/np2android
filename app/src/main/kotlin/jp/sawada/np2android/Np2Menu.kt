@@ -17,6 +17,10 @@ class Np2Menu(private val ctx: Context, private val host: Host) {
     interface Host {
         /** SAF で端末内のファイルを選び、取り込み後に [target] へ挿入する */
         fun importDisk(target: DiskTarget)
+        /** SAF で端末内のファイルを選び、コピーせずに [target] へ挿入する */
+        fun openDirect(target: DiskTarget)
+        /** 直接オープンの履歴から [target] へ挿入する */
+        fun insertRecent(target: DiskTarget, entry: DiskImageSource.Entry)
         fun openSettings()
         /** 作業フォルダをシステムのファイル画面で開く */
         fun openFileManager()
@@ -60,23 +64,38 @@ class Np2Menu(private val ctx: Context, private val host: Host) {
     // ---- ディスク ----
 
     private fun diskMenu(t: DiskTarget) {
-        val files = DiskImages.list(ctx, t.kind)
-        val labels = mutableListOf("＋ 端末から取り込む…")
-        labels += files.map { it.name }
-        val hasDisk = current(t) != "(なし)"
-        if (hasDisk) labels += "取り出す"
+        // 直接オープン (SAF) は FDD から対応する。HDD はフェーズ4で対応
+        val direct = t.kind == DiskImages.Kind.FDD
+        val items = mutableListOf<Pair<String, () -> Unit>>()
+        if (direct) items += ctx.getString(R.string.disk_open_direct) to { host.openDirect(t) }
+        items += ctx.getString(R.string.disk_import_copy) to { host.importDisk(t) }
+        if (direct) {
+            for (e in DiskImageSource.recent(ctx, t.kind)) {
+                items += ctx.getString(R.string.disk_direct_suffix, e.name) to { host.insertRecent(t, e) }
+            }
+        }
+        for (f in DiskImages.list(ctx, t.kind)) {
+            items += f.name to { insert(t, f) }
+        }
+        if (current(t) != "(なし)") items += "取り出す" to { eject(t) }
 
         builder()
             .setTitle("${t.label}: ${current(t)}")
-            .setItems(labels.toTypedArray()) { _, i ->
-                when {
-                    i == 0 -> host.importDisk(t)
-                    i <= files.size -> insert(t, files[i - 1])
-                    else -> eject(t)
-                }
-            }
-            .setNegativeButton("キャンセル", null)
+            .setItems(items.map { it.first }.toTypedArray()) { _, i -> items[i].second() }
+            .setNegativeButton(R.string.cancel, null)
             .show()
+    }
+
+    /** SAF で登録した仮想パス [path] を挿入する */
+    fun insertDirect(t: DiskTarget, entry: DiskImageSource.Entry, path: String) {
+        if (t.kind == DiskImages.Kind.FDD) {
+            Np2Native.setFdd(t.drive, path)
+            toast(ctx.getString(if (entry.readOnly) R.string.disk_inserted_readonly else R.string.disk_inserted,
+                t.label, entry.name))
+        } else {
+            Np2Native.setHdd(t.drive, path)
+            askReset("${t.label} を ${entry.name} に変更しました。")
+        }
     }
 
     fun insert(t: DiskTarget, file: File) {

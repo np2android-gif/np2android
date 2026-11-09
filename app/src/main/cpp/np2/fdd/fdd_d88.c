@@ -193,6 +193,19 @@ static void drvflush(FDDFILE fdd) {
 	}
 }
 
+#if defined(__ANDROID__)	/* ANDROID-SAF */
+/* トラックバッファの未書き込み分をファイルに書き戻す (バックグラウンドへ移るとき用) */
+void fddd88_flush(void) {
+
+	D88TRK	trk;
+
+	trk = &d88trk;
+	if ((trk->fdd != NULL) && (trk->write)) {
+		d88trk_flushdata(trk);
+	}
+}
+#endif
+
 static BRESULT trkseek(FDDFILE fdd, UINT track) {
 
 	D88TRK	trk;

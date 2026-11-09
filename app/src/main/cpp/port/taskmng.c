@@ -23,6 +23,10 @@
 #include "np2bridge.h"
 #include "scrndraw.h"
 #include "np2.h"
+#include "fdd/fddfile.h"
+#include "fdd/fdd_d88.h"
+#include "fdd/sxsi.h"
+#include "android_safio.h"
 
 	BOOL	task_avail;
 
@@ -385,8 +389,16 @@ void taskmng_rol(void) {
 				 * np2_main 終了時のレジューム保存は当てにできないので、ここで保存しておく。
 				 * SDL はこのイベントをアプリが受け取るまでスレッドを止めない (SDL_androidevents.c) ので、
 				 * ここでの保存は止められる前に必ず終わる。
+				 *
+				 * ディスクの書き込みはレジューム保存より先にファイルへ出す。レジュームにはイメージの
+				 * 更新日時が記録されるので、後から書くと次回起動時に「ディスクが更新された」扱いになる。
+				 * D88 のトラックバッファは次のアクセスか取り出しまで書き戻されず、HDD も FILE* の
+				 * バッファに残っているので、ここで出してから SAF の fd を fsync する。
 				 */
+				fddd88_flush();
+				sxsi_allflash();
 				np2_saveresume();
+				safio_syncall();
 				break;
 
 			case SDL_QUIT:

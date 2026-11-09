@@ -5,6 +5,9 @@ extern "C" {
 
 BRESULT fddd88_set(FDDFILE fdd, const OEMCHAR *fname, int ro);
 BRESULT fddd88_eject(FDDFILE fdd);
+#if defined(__ANDROID__)	/* ANDROID-SAF */
+void fddd88_flush(void);
+#endif
 
 BRESULT fdd_diskaccess_d88(void);
 BRESULT fdd_seek_d88(void);
