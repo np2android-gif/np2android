@@ -106,4 +106,11 @@ target_compile_options(main PRIVATE
     -fno-strict-aliasing
 )
 
+# 性能: リリース系は -O3 (NDK 既定の -O2 より後に付くので上書きされる)。デバッグ版は -O0 のまま。
+# -Bsymbolic: libmain.so 内の関数呼び出しを PLT 経由でなく直接呼び出しにする。
+# 実機 (Snapdragon 845) の計測で -O3 が約 5%、-Bsymbolic が約 12%、合わせて約 18% 速くなった。
+# LTO (-flto=thin) は効果が誤差程度だったので使わない。
+target_compile_options(main PRIVATE $<$<NOT:$<CONFIG:Debug>>:-O3>)
+target_link_options(main PRIVATE -Wl,-Bsymbolic)
+
 target_link_libraries(main PRIVATE SDL2 log android)
