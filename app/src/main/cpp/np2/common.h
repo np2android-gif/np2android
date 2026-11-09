@@ -12,27 +12,32 @@ enum {
 #define	INTPTR		intptr_t
 #endif
 
+/*
+ * 0.86 への修正報告による: a が UINT8 のポインタ以外 (char * や UINT16 * など) でも
+ * 正しくバイト単位で読み書きするよう、UINT8 のポインタにキャストする。
+ */
 #ifndef LOADINTELDWORD
-#define	LOADINTELDWORD(a)		(((UINT32)(a)[0]) |				\
-								((UINT32)(a)[1] << 8) |			\
-								((UINT32)(a)[2] << 16) |		\
-								((UINT32)(a)[3] << 24))
+#define	LOADINTELDWORD(a)		(((UINT32)((const UINT8 *)(a))[0]) |		\
+								((UINT32)((const UINT8 *)(a))[1] << 8) |	\
+								((UINT32)((const UINT8 *)(a))[2] << 16) |	\
+								((UINT32)((const UINT8 *)(a))[3] << 24))
 #endif
 
 #ifndef LOADINTELWORD
-#define	LOADINTELWORD(a)		(((UINT16)(a)[0]) | ((UINT16)(a)[1] << 8))
+#define	LOADINTELWORD(a)		(((UINT16)((const UINT8 *)(a))[0]) |		\
+								((UINT16)((const UINT8 *)(a))[1] << 8))
 #endif
 
 #ifndef STOREINTELDWORD
-#define	STOREINTELDWORD(a, b)	*((a)+0) = (UINT8)((b));		\
-								*((a)+1) = (UINT8)((b)>>8);		\
-								*((a)+2) = (UINT8)((b)>>16);	\
-								*((a)+3) = (UINT8)((b)>>24)
+#define	STOREINTELDWORD(a, b)	*(((UINT8 *)(a))+0) = (UINT8)((b));		\
+								*(((UINT8 *)(a))+1) = (UINT8)((b)>>8);	\
+								*(((UINT8 *)(a))+2) = (UINT8)((b)>>16);	\
+								*(((UINT8 *)(a))+3) = (UINT8)((b)>>24)
 #endif
 
 #ifndef STOREINTELWORD
-#define	STOREINTELWORD(a, b)	*((a)+0) = (UINT8)((b));			\
-								*((a)+1) = (UINT8)((b)>>8)
+#define	STOREINTELWORD(a, b)	*(((UINT8 *)(a))+0) = (UINT8)((b));		\
+								*(((UINT8 *)(a))+1) = (UINT8)((b)>>8)
 #endif
 
 #ifndef	NELEMENTS
