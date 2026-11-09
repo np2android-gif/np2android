@@ -265,123 +265,134 @@ static void touch_up(const SDL_TouchFingerEvent *f) {
 
 /* ---- main ---- */
 
+/*
+ * 1 回の呼び出しで溜まっているイベントをまとめて処理する。
+ * 上流は 1 回に 1 個だけで、エミュレーションが重くて実時間に追いつかないとき
+ * (taskmng_rol が 1 フレームに 1 回しか呼ばれないとき) 指の移動イベント (120Hz 前後) が
+ * 溜まり、操作が遅れて見えていた。イベントが途切れず届き続けても抜けられるよう上限を設ける。
+ */
+#define	MAX_EVENTS_PER_ROL	256
+
 void taskmng_rol(void) {
 
 	SDL_Event	e;
+	int			n;
 
 	mousemng_update();
 	redraw_update();
 
-	if ((!task_avail) || (!SDL_PollEvent(&e))) {
-		return;
-	}
-	switch(e.type) {
-		case SDL_USEREVENT:
-			np2bridge_handle(&e);
-			break;
-
-		case SDL_FINGERDOWN:
-		case SDL_FINGERMOTION:
-		case SDL_FINGERUP:
-			/* 外部マウスから合成されたタッチは無視 (マウスイベント側で処理) */
-			if ((e.tfinger.touchId == SDL_MOUSE_TOUCHID) || (menuvram != NULL)) {
+	for (n = 0; n < MAX_EVENTS_PER_ROL; n++) {
+		if ((!task_avail) || (!SDL_PollEvent(&e))) {
+			return;
+		}
+		switch(e.type) {
+			case SDL_USEREVENT:
+				np2bridge_handle(&e);
 				break;
-			}
-			if (e.type == SDL_FINGERDOWN) {
-				touch_down(&e.tfinger);
-			}
-			else if (e.type == SDL_FINGERMOTION) {
-				touch_motion(&e.tfinger);
-			}
-			else {
-				touch_up(&e.tfinger);
-			}
-			break;
 
-		case SDL_MOUSEMOTION:
-			if (menuvram != NULL) {
-				menubase_moving(e.motion.x, e.motion.y, 0);
-			}
-			else if (e.motion.which != SDL_TOUCH_MOUSEID) {
-				/* 外部マウス */
-				mousemng_move((float)e.motion.xrel, (float)e.motion.yrel);
-			}
-			break;
-
-		case SDL_MOUSEBUTTONDOWN:
-		case SDL_MOUSEBUTTONUP:
-			if (menuvram != NULL) {
-				if (e.button.button == SDL_BUTTON_LEFT) {
-					menubase_moving(e.button.x, e.button.y,
-									(e.type == SDL_MOUSEBUTTONDOWN) ? 1 : 2);
+			case SDL_FINGERDOWN:
+			case SDL_FINGERMOTION:
+			case SDL_FINGERUP:
+				/* 外部マウスから合成されたタッチは無視 (マウスイベント側で処理) */
+				if ((e.tfinger.touchId == SDL_MOUSE_TOUCHID) || (menuvram != NULL)) {
+					break;
 				}
-			}
-			else if (e.button.which != SDL_TOUCH_MOUSEID) {
-				/* 外部マウス */
-				if (e.button.button == SDL_BUTTON_LEFT) {
-					mousemng_button(MOUSEMNG_LEFT, e.type == SDL_MOUSEBUTTONDOWN);
+				if (e.type == SDL_FINGERDOWN) {
+					touch_down(&e.tfinger);
 				}
-				else if (e.button.button == SDL_BUTTON_RIGHT) {
-					mousemng_button(MOUSEMNG_RIGHT, e.type == SDL_MOUSEBUTTONDOWN);
-				}
-			}
-			break;
-
-		case SDL_KEYDOWN:
-			if (e.key.keysym.sym == SDLK_F11) {
-				if (menuvram == NULL) {
-					sysmenu_menuopen(0, 0, 0);
+				else if (e.type == SDL_FINGERMOTION) {
+					touch_motion(&e.tfinger);
 				}
 				else {
-					menubase_close();
+					touch_up(&e.tfinger);
 				}
-			}
-			else {
-				sdlkbd_keydown(e.key.keysym.sym);
-			}
-			break;
+				break;
 
-		case SDL_KEYUP:
-			sdlkbd_keyup(e.key.keysym.sym);
-			break;
+			case SDL_MOUSEMOTION:
+				if (menuvram != NULL) {
+					menubase_moving(e.motion.x, e.motion.y, 0);
+				}
+				else if (e.motion.which != SDL_TOUCH_MOUSEID) {
+					/* 外部マウス */
+					mousemng_move((float)e.motion.xrel, (float)e.motion.yrel);
+				}
+				break;
 
-		case SDL_WINDOWEVENT:
-			switch (e.window.event) {
-				case SDL_WINDOWEVENT_FOCUS_LOST:
-					/* フォーカスを失ったら押しっぱなしを防ぐ */
-					keystat_allrelease();
-					mousemng_releaseall();
-					touch_reset();
-					break;
+			case SDL_MOUSEBUTTONDOWN:
+			case SDL_MOUSEBUTTONUP:
+				if (menuvram != NULL) {
+					if (e.button.button == SDL_BUTTON_LEFT) {
+						menubase_moving(e.button.x, e.button.y,
+										(e.type == SDL_MOUSEBUTTONDOWN) ? 1 : 2);
+					}
+				}
+				else if (e.button.which != SDL_TOUCH_MOUSEID) {
+					/* 外部マウス */
+					if (e.button.button == SDL_BUTTON_LEFT) {
+						mousemng_button(MOUSEMNG_LEFT, e.type == SDL_MOUSEBUTTONDOWN);
+					}
+					else if (e.button.button == SDL_BUTTON_RIGHT) {
+						mousemng_button(MOUSEMNG_RIGHT, e.type == SDL_MOUSEBUTTONDOWN);
+					}
+				}
+				break;
 
-				case SDL_WINDOWEVENT_SIZE_CHANGED:
-				case SDL_WINDOWEVENT_RESIZED:
-				case SDL_WINDOWEVENT_EXPOSED:
-				case SDL_WINDOWEVENT_SHOWN:
-				case SDL_WINDOWEVENT_RESTORED:
-				case SDL_WINDOWEVENT_FOCUS_GAINED:
-					/*
-					 * 画面の回転・復帰で描画面が作り直されると表示が消える。np2 は変化した部分しか
-					 * 描かないため、静止画面 (DOS のプロンプト等) では黒いままになるので全体を描き直す。
-					 */
-					redraw_request();
-					break;
-			}
-			break;
+			case SDL_KEYDOWN:
+				if (e.key.keysym.sym == SDLK_F11) {
+					if (menuvram == NULL) {
+						sysmenu_menuopen(0, 0, 0);
+					}
+					else {
+						menubase_close();
+					}
+				}
+				else {
+					sdlkbd_keydown(e.key.keysym.sym);
+				}
+				break;
 
-		case SDL_APP_DIDENTERBACKGROUND:
-			/*
-			 * バックグラウンドへ移った。Android はこの後プロセスを予告なく止めることがあり
-			 * np2_main 終了時のレジューム保存は当てにできないので、ここで保存しておく。
-			 * SDL はこのイベントをアプリが受け取るまでスレッドを止めない (SDL_androidevents.c) ので、
-			 * ここでの保存は止められる前に必ず終わる。
-			 */
-			np2_saveresume();
-			break;
+			case SDL_KEYUP:
+				sdlkbd_keyup(e.key.keysym.sym);
+				break;
 
-		case SDL_QUIT:
-			task_avail = FALSE;
-			break;
+			case SDL_WINDOWEVENT:
+				switch (e.window.event) {
+					case SDL_WINDOWEVENT_FOCUS_LOST:
+						/* フォーカスを失ったら押しっぱなしを防ぐ */
+						keystat_allrelease();
+						mousemng_releaseall();
+						touch_reset();
+						break;
+
+					case SDL_WINDOWEVENT_SIZE_CHANGED:
+					case SDL_WINDOWEVENT_RESIZED:
+					case SDL_WINDOWEVENT_EXPOSED:
+					case SDL_WINDOWEVENT_SHOWN:
+					case SDL_WINDOWEVENT_RESTORED:
+					case SDL_WINDOWEVENT_FOCUS_GAINED:
+						/*
+						 * 画面の回転・復帰で描画面が作り直されると表示が消える。np2 は変化した部分しか
+						 * 描かないため、静止画面 (DOS のプロンプト等) では黒いままになるので全体を描き直す。
+						 */
+						redraw_request();
+						break;
+				}
+				break;
+
+			case SDL_APP_DIDENTERBACKGROUND:
+				/*
+				 * バックグラウンドへ移った。Android はこの後プロセスを予告なく止めることがあり
+				 * np2_main 終了時のレジューム保存は当てにできないので、ここで保存しておく。
+				 * SDL はこのイベントをアプリが受け取るまでスレッドを止めない (SDL_androidevents.c) ので、
+				 * ここでの保存は止められる前に必ず終わる。
+				 */
+				np2_saveresume();
+				break;
+
+			case SDL_QUIT:
+				task_avail = FALSE;
+				break;
+		}
 	}
 }
 
