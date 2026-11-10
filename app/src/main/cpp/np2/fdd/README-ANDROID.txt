@@ -16,6 +16,8 @@ np2kai (https://github.com/AZO234/NP2kai) の fdd/ から、HDD イメージの�
   SCSI は port/compiler.h で SUPPORT_SCSI を定義して有効にしている (IA-32 構成で IDE と併用。
   np2kai の IA-32 構成と同じ)。SCSI のディスクをつないだときだけ SCSI ボード (BIOS は d2000h) が
   有効になる。ステートセーブには SCSI の節が増えるが、SCSI の節が無い古いセーブもロードできる。
+  注意: SCSI BIOS (d2000h〜) はSCSI のディスクをつないだときだけ現れる。ゲスト側で EMM386 などの
+  UMB の範囲を固定で設定していると、ぶつかることがある (そのときは d2000h〜d5fffh を UMB から外す)。
 
 Android 向けの変更 (np2kai を更新して取り込み直すときに、同じ変更を入れ直すこと)
   - 変更箇所には /* ANDROID-SAF */ の印を付けている
