@@ -61,6 +61,7 @@ class Np2Menu(private val ctx: Context, private val host: Host) {
             "詳細設定 (np2 内蔵メニュー)" to { Np2Native.toggleMenu() },
             "ファイル管理" to { host.openFileManager() },
             "設定" to { host.openSettings() },
+            ctx.getString(R.string.about_menu) to { AboutDialog.show(ctx) },
             "終了" to { confirm("Neko Project II を終了しますか？") { Np2Native.exit() } },
         )
         builder()

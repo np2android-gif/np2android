@@ -7,6 +7,7 @@
 #include "dosio.h"
 #if defined(__ANDROID__)	/* ANDROID-SAF */
 #include <stdio_ext.h>
+#include <unistd.h>
 #include "android_safio.h"
 #endif
 #if defined(WIN32)
@@ -112,6 +113,18 @@ short file_close(FILEH handle) {
 #endif
 	return((fclose(handle) == 0) ? 0 : -1);
 }
+
+#if defined(__ANDROID__)	/* ANDROID: np2kai の diskimage/ (NFD) が使う */
+/* ファイルの長さを変える。fwrite のバッファを先に書き出してから切り詰め・延長する */
+short file_setsize(FILEH handle, FILELEN length) {
+
+	if ((fflush(handle) != 0) || (ftruncate(fileno(handle), (off_t)length) != 0)) {
+		safio_ioerror(handle);
+		return(-1);
+	}
+	return(0);
+}
+#endif
 
 UINT file_getsize(FILEH handle) {
 

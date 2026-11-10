@@ -104,9 +104,23 @@ void fdcsend_success7(void) {
 	fdc.event = FDCEVENT_BUFSEND;
 	fdc.bufp = 0;
 	fdc.bufcnt = 7;
+#ifdef SUPPORT_KAI_IMAGES	/* ANDROID: np2kai から移植 */
+	if (fdd_fdcresult() == FALSE) {
+		fdc.buf[0] = (fdc.hd << 2) | fdc.us;
+		fdc.buf[1] = 0;
+		fdc.buf[2] = 0;
+	}
+	else {
+		/* FD イメージが FDC のリザルトコードを持っている場合 (fdc.stat に設定済み) はそれを返す */
+		fdc.buf[0] = (fdc.hd << 2) | fdc.us | (UINT8)(fdc.stat[fdc.us] >>  0);
+		fdc.buf[1] = (UINT8)(fdc.stat[fdc.us] >>  8);
+		fdc.buf[2] = (UINT8)(fdc.stat[fdc.us] >> 16);
+	}
+#else
 	fdc.buf[0] = (fdc.hd << 2) | fdc.us;
 	fdc.buf[1] = 0;
 	fdc.buf[2] = 0;
+#endif
 	fdc.buf[3] = fdc.C;
 	fdc.buf[4] = fdc.H;
 	fdc.buf[5] = fdc.R;
@@ -394,6 +408,95 @@ static void FDC_ReadData(void) {						// cmd: 06
 	}
 }
 
+#ifdef SUPPORT_KAI_IMAGES	/* ANDROID: np2kai から移植 (シーク音・fdc_lasttreg はこの版に無いので省いた) */
+static BOOL fdc_diag_nfd1_mode;
+
+static BOOL fdc_nfd1_diag_target(void) {
+
+	UINT	drv;
+
+	/* get_hdus() 前なので、FDC の状態を変えずにコマンドバイトから対象ドライブを得る */
+	drv = fdc.cmds[0] & 3;
+	return(fddfile[drv].type == DISKTYPE_NFD &&
+		fddfile[drv].inf.nfd.revision);
+}
+
+static void fdc_nfd1_diag_ready(void) {
+
+	/* readsector() の転送開始と同じ */
+	fdc.event = FDCEVENT_BUFSEND2;
+	fdc.bufp = 0;
+	fdc.status = FDCSTAT_NDM | FDCSTAT_CB;
+	if (!(fdc.ctrlreg & 0x10)) {
+		fdc.status |= FDCSTAT_RQM | FDCSTAT_DIO;
+	}
+	fdc_dmaready(1);
+	dmac_check();
+}
+
+static void FDC_ReadDiagnostic(void) {					// cmd: 02
+
+	/* コマンド開始時に NFD r1 かを確認。NFD r1 以外は従来どおり READ DATA として扱う */
+	if (fdc.event == FDCEVENT_CMDRECV) {
+		fdc_diag_nfd1_mode = fdc_nfd1_diag_target();
+	}
+	if (!fdc_diag_nfd1_mode) {
+		FDC_ReadData();
+		return;
+	}
+
+	switch(fdc.event) {
+		case FDCEVENT_CMDRECV:
+			get_hdus();
+			get_chrn();
+			get_eotgsldtl();
+			fdc.stat[fdc.us] = (fdc.hd << 2) | fdc.us;
+			if (!FDC_DriveCheck(FALSE)) {
+				fdc_diag_nfd1_mode = FALSE;
+				return;
+			}
+			if (fdd_diagread() == SUCCESS) {
+				fdc_nfd1_diag_ready();
+				break;
+			}
+			/* 0xc0 は特殊読み込み情報なし。従来の READ DATA へ切り替える */
+			if (fddlasterror == 0xc0) {
+				fdc_diag_nfd1_mode = FALSE;
+				FDC_ReadData();
+				break;
+			}
+			fdc_diag_nfd1_mode = FALSE;
+			fdc.stat[fdc.us] = fdc.us | (fdc.hd << 2) | FDCRLT_IC0 | FDCRLT_ND;
+			fdcsend_error7();
+			break;
+
+		case FDCEVENT_NEXTDATA:
+			fdc_diag_nfd1_mode = FALSE;
+			fdc.bufcnt = 0;
+			fdcsend_success7();
+			break;
+
+		default:
+			fdc_diag_nfd1_mode = FALSE;
+			FDC_ReadData();
+			break;
+	}
+}
+
+static void FDC_ScanEqual(void) {						// cmd: 11, 19, 1d
+
+	switch(fdc.event) {
+		case FDCEVENT_CMDRECV:
+			get_hdus();
+			get_chrn();
+			fdc.eot = fdc.cmds[5];
+			fdc.gpl = fdc.cmds[6];
+			fdc.stp = fdc.cmds[7];
+			break;
+	}
+}
+#endif
+
 static void FDC_Recalibrate(void) {						// cmd: 07
 
 	switch(fdc.event) {
@@ -588,7 +691,11 @@ typedef void (*FDCOPE)(void);
 static const FDCOPE FDC_Ope[0x20] = {
 				FDC_Invalid,
 				FDC_Invalid,
+#ifdef SUPPORT_KAI_IMAGES	/* ANDROID: np2kai から移植 */
+				FDC_ReadDiagnostic,
+#else
 				FDC_ReadData,			// FDC_ReadDiagnostic,
+#endif
 				FDC_Specify,
 				FDC_SenseDeviceStatus,
 				FDC_WriteData,
@@ -603,7 +710,11 @@ static const FDCOPE FDC_Ope[0x20] = {
 				FDC_Invalid,
 				FDC_Seek,
 				FDC_Invalid,					// 10
+#ifdef SUPPORT_KAI_IMAGES	/* ANDROID: np2kai から移植 */
+				FDC_ScanEqual,
+#else
 				FDC_Invalid,			// FDC_ScanEqual,
+#endif
 				FDC_Invalid,
 				FDC_Invalid,
 				FDC_Invalid,
@@ -611,11 +722,19 @@ static const FDCOPE FDC_Ope[0x20] = {
 				FDC_Invalid,
 				FDC_Invalid,
 				FDC_Invalid,
+#ifdef SUPPORT_KAI_IMAGES	/* ANDROID: np2kai から移植 */
+				FDC_ScanEqual,
+#else
 				FDC_Invalid,			// FDC_ScanEqual,
+#endif
 				FDC_Invalid,
 				FDC_Invalid,
 				FDC_Invalid,
+#ifdef SUPPORT_KAI_IMAGES	/* ANDROID: np2kai から移植 */
+				FDC_ScanEqual,
+#else
 				FDC_Invalid,			// FDC_ScanEqual,
+#endif
 				FDC_Invalid,
 				FDC_Invalid};
 
@@ -626,6 +745,9 @@ static void fdcstatusreset(void) {
 
 	fdc.event = FDCEVENT_NEUTRAL;
 	fdc.status = FDCSTAT_RQM;
+#ifdef SUPPORT_KAI_IMAGES	/* ANDROID: np2kai から移植 */
+	fdc_diag_nfd1_mode = FALSE;
+#endif
 }
 
 void DMACCALL fdc_datawrite(REG8 data) {
@@ -840,6 +962,9 @@ static const IOINP fdcibe[1] = {fdc_ibe};
 void fdc_reset(const NP2CFG *pConfig) {
 
 	ZeroMemory(&fdc, sizeof(fdc));
+#ifdef SUPPORT_KAI_IMAGES	/* ANDROID: np2kai から移植 */
+	fdc_diag_nfd1_mode = FALSE;
+#endif
 	fdc.equip = pConfig->fddequip;
 #if defined(SUPPORT_PC9821)
 	fdc.support144 = 1;

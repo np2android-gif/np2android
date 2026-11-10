@@ -40,6 +40,14 @@ typedef	signed int			SINT32;
 typedef	unsigned int		UINT32;
 typedef	int64_t				SINT64;
 typedef	uint64_t			UINT64;
+/* np2kai の diskimage/ (NFD・VFDD のヘッダー構造体) が使う Windows 風の型 (np2kai の compiler_base.h と同じ) */
+typedef	uint8_t				BYTE;
+typedef	uint16_t			WORD;
+typedef	uint32_t			DWORD;
+/* np2kai の dosio のファイル位置の型。この版の file_seek は long を取る (64bit なので 2GB 超も扱える) */
+typedef	long				FILEPOS;
+/* np2kai の dosio のファイル長の型 (np2kai の compiler_base.h と同じ) */
+typedef	int64_t				FILELEN;
 
 #define	INTPTR				intptr_t
 #define	PTR_TO_UINT32(p)	((UINT32)(uintptr_t)(p))
@@ -145,6 +153,8 @@ typedef	signed char			BOOL;
 #define	SUPPORT_ARC
 #define	SUPPORT_RESUME
 #define	SUPPORT_STATSAVE
+/* FDD イメージの処理は np2kai の diskimage/ を使う (NFD・DCP・VFDD・BKDSK にも対応) */
+#define	SUPPORT_KAI_IMAGES
 
 #if defined(CPUCORE_IA32)
 /* PC-9821 (IA-32) 構成: x11 版に合わせて IDE を使う */

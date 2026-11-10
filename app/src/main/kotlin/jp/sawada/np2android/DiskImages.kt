@@ -15,8 +15,12 @@ import java.io.File
 object DiskImages {
 
     enum class Kind(val extensions: Set<String>) {
-        /** d88 系・fdi は形式判定あり、それ以外はサイズで判定されるベタイメージ */
-        FDD(setOf("d88", "88d", "d98", "98d", "fdi", "xdf", "hdm", "dup", "2hd", "tfd", "nfd", "fdd", "flp", "img")),
+        /**
+         * d88 系・fdi・dcp/dcu・nfd・fdd (Virtual98) は形式判定あり (np2kai の diskimage/)。
+         * それ以外はサイズで判定されるベタイメージ (合わなければ BKDSK (hdb など) として判定)
+         */
+        FDD(setOf("d88", "88d", "d98", "98d", "fdi", "xdf", "hdm", "dup", "2hd", "tfd", "nfd", "fdd", "flp", "img",
+            "dcp", "dcu", "hdb")),
         /** SASI/IDE: thd・nhd・hdi、SCSI: hdd */
         HDD(setOf("thd", "nhd", "hdi", "hdd")),
     }

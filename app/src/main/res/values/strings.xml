@@ -36,6 +36,10 @@
     <string name="newdisk_done">%1$s を作業フォルダ (disks) に作りました。\nFDD・HDD のメニューから選んで使えます。</string>
     <string name="newdisk_failed">%1$s を作れませんでした</string>
 
+    <!-- このアプリについて -->
+    <string name="about_menu">このアプリについて</string>
+    <string name="about_title">Neko Project II %1$s</string>
+
     <string name="cancel">キャンセル</string>
     <string name="ok">OK</string>
 </resources>

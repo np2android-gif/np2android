@@ -1,0 +1,29 @@
+diskimage/ (FDD イメージの処理)
+================================
+
+np2kai (https://github.com/AZO234/NP2kai) の diskimage/ のうち、FDD に関するものを取り込んだ。
+取り込んだ版: wx_alpha ブランチ 5939e0c6d5985c4c08fc70f289a83290e5d3e6f7 (2026-09-05)
+
+取り込んだファイル
+  fddfile.c / fddfile.h / img_common.h / img_strres.c / img_strres.h
+  fd/ 以下すべて (d88, xdf (ベタ・FDI), dcp/dcu, nfd, vfdd (.fdd), bkdsk (.hdb など))
+取り込んでいないもの
+  cd/, cddfile.c/h, win9x/ (CD-ROM イメージは対象外)
+
+xnp2 の fdd/fddfile.c・fdd_d88.c・fdd_xdf.c・d88head.h は削除し、fdd/fddfile.h はこちらを
+読み込むだけのファイルにした。SUPPORT_KAI_IMAGES は port/compiler.h で定義している。
+
+Android 向けの変更 (np2kai を更新して取り込み直すときに、同じ変更を入れ直すこと)
+  - 変更箇所には /* ANDROID */ または /* ANDROID-SAF */ の印を付けている
+  - fddfile.c: np2cfg.fddfile (この版の np2cfg には無い) への書き込みを外した
+  - fd/fdd_d88.c / fdd_d88.h: fddd88_flush() を追加 (バックグラウンドへ移るときにトラック
+    バッファを書き戻す。port/taskmng.c から呼ぶ)
+  - io/fdc.c・bios/bios1b.c: np2kai の SUPPORT_KAI_IMAGES の部分だけを移植した。
+    fdc.c は丸ごと置き換えていない (np2kai の _FDC は 8 バイト大きく、ステートセーブの
+    互換性がなくなるため)
+
+ライセンス
+  取り込んだファイルには個別のライセンス表記がなく、np2kai 全体のライセンスが適用される。
+  - LICENSE-NP2kai.txt : MIT License (Copyright (c) 2017 AZO)
+  - LICENSE-NP2.txt    : 3 条項 BSD (Copyright (c) 1999-2025, NP2 developer team)
+  アプリ内の「ライセンス」画面にも同じ内容を表示している。

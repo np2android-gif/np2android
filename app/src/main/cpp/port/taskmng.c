@@ -24,7 +24,7 @@
 #include "scrndraw.h"
 #include "np2.h"
 #include "fdd/fddfile.h"
-#include "fdd/fdd_d88.h"
+#include "diskimage/fd/fdd_d88.h"
 #include "fdd/sxsi.h"
 #include "android_safio.h"
 

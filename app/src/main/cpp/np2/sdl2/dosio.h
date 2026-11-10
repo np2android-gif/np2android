@@ -65,6 +65,9 @@ UINT file_read(FILEH handle, void *data, UINT length);
 UINT file_write(FILEH handle, const void *data, UINT length);
 short file_close(FILEH handle);
 UINT file_getsize(FILEH handle);
+#if defined(__ANDROID__)	/* ANDROID: np2kai ‚Ì diskimage/ ‚ªŽg‚¤ */
+short file_setsize(FILEH handle, FILELEN length);
+#endif
 short file_getdatetime(FILEH handle, DOSDATE *dosdate, DOSTIME *dostime);
 short file_delete(const char *path);
 short file_attr(const char *path);

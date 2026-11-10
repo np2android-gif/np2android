@@ -29,6 +29,9 @@ file(GLOB NP2_SOURCES CONFIGURE_DEPENDS
     ${NP2}/embed/menu/*.c
     ${NP2}/embed/menubase/*.c
     ${NP2}/fdd/*.c
+    # FDD イメージは np2kai の diskimage/ (CD-ROM の cd/・cddfile.c は取り込んでいない)
+    ${NP2}/diskimage/*.c
+    ${NP2}/diskimage/fd/*.c
     ${NP2}/font/*.c
     ${NP2}/generic/*.c
     ${NP2}/io/*.c

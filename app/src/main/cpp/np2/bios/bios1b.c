@@ -167,7 +167,13 @@ static void fdd_int(int result) {
 		default:
 			return;
 	}
+#ifdef SUPPORT_KAI_IMAGES	/* ANDROID: np2kai から移植。イメージがリザルトコードを持っていればそれを使う */
+	if (fdd_fdcresult() == FALSE) {
+		fdc.stat[fdc.us] = (fdc.hd << 2) | fdc.us;
+	}
+#else
 	fdc.stat[fdc.us] = (fdc.hd << 2) | fdc.us;
+#endif
 	switch(result) {
 		case FDCBIOS_SUCCESS:
 			fdcsend_success7();
@@ -305,6 +311,12 @@ static REG8 fdd_operate(REG8 type, REG8 rpm, BOOL ndensity) {
 
 	// とりあえずBIOSの時は無視する
 	fdc.mf = 0xff;
+#ifdef SUPPORT_KAI_IMAGES	/* ANDROID: np2kai から移植。NFD r1 だけ BIOS 経由のコマンド値を参照する */
+	if (fddfile[CPU_AL & 3].type == DISKTYPE_NFD &&
+		fddfile[CPU_AL & 3].inf.nfd.revision) {
+		fddbioscmd = (UINT8)(CPU_AH & 0x0f);
+	}
+#endif
 
 //	TRACE_("int 1Bh", CPU_AH);
 
@@ -403,6 +415,15 @@ static REG8 fdd_operate(REG8 type, REG8 rpm, BOOL ndensity) {
 				if (fdd_read()) {
 					break;
 				}
+#ifdef SUPPORT_KAI_IMAGES	/* ANDROID: np2kai から移植。NFD r1 の特殊読み込みだけ実際の転送長を使う */
+				if (fddfile[fdc.us].type == DISKTYPE_NFD &&
+					fddfile[fdc.us].inf.nfd.revision) {
+					if (fdc.bufcnt <= 0) {
+						break;
+					}
+					accesssize = (fdc.bufcnt < size) ? (UINT16)fdc.bufcnt : size;
+				}
+#endif
 				size -= accesssize;
 				mtr_r += accesssize;
 				if ((fdc.R++ == (UINT8)para) &&
@@ -561,6 +582,15 @@ static REG8 fdd_operate(REG8 type, REG8 rpm, BOOL ndensity) {
 				if (fdd_read()) {
 					break;
 				}
+#ifdef SUPPORT_KAI_IMAGES	/* ANDROID: np2kai から移植。NFD r1 の特殊読み込みだけ実際の転送長を使う */
+				if (fddfile[fdc.us].type == DISKTYPE_NFD &&
+					fddfile[fdc.us].inf.nfd.revision) {
+					if (fdc.bufcnt <= 0) {
+						break;
+					}
+					accesssize = (fdc.bufcnt < size) ? (UINT16)fdc.bufcnt : size;
+				}
+#endif
 				MEML_WRITES(addr, fdc.buf, accesssize);
 				addr += accesssize;
 				size -= accesssize;
