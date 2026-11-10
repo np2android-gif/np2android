@@ -35,6 +35,12 @@ extern const OEMCHAR str_hdi[];
 extern const OEMCHAR str_fdi[];
 extern const OEMCHAR str_hdd[];
 extern const OEMCHAR str_nhd[];
+#if defined(__ANDROID__)	/* ANDROID-SAF: np2kai の fdd/sxsihdd.c が使う */
+extern const OEMCHAR str_vhd[];
+extern const OEMCHAR str_slh[];
+extern const OEMCHAR str_hdn[];
+extern const OEMCHAR str_hds[];
+#endif
 
 extern const OEMCHAR str_d[];
 extern const OEMCHAR str_u[];

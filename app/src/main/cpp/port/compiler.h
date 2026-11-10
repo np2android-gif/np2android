@@ -85,6 +85,10 @@ typedef	signed char			BOOL;
 #ifndef	min
 #define	min(a,b)	(((a) < (b)) ? (a) : (b))
 #endif
+/* np2kai から取り込んだ fdd/sxsihdd.c が使う */
+#ifndef	MIN
+#define	MIN(a,b)	(((a) < (b)) ? (a) : (b))
+#endif
 
 #ifndef	ZeroMemory
 #define	ZeroMemory(d,n)		memset((d), 0, (n))
@@ -155,6 +159,8 @@ typedef	signed char			BOOL;
 #define	SUPPORT_STATSAVE
 /* FDD イメージの処理は np2kai の diskimage/ を使う (NFD・DCP・VFDD・BKDSK にも対応) */
 #define	SUPPORT_KAI_IMAGES
+/* HDD の VirtualPC VHD (固定・可変) に対応する (np2kai の fdd/hdd_vhd.h) */
+#define	SUPPORT_VPCVHD
 
 #if defined(CPUCORE_IA32)
 /* PC-9821 (IA-32) 構成: x11 版に合わせて IDE を使う */

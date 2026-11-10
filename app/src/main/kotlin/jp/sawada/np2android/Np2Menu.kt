@@ -28,7 +28,7 @@ class Np2Menu(private val ctx: Context, private val host: Host) {
 
     /**
      * ディスクの挿入先。[extensions] はそのドライブで使える拡張子
-     * (np2 は SASI/IDE で thd・nhd・hdi、SCSI で hdd だけを受け付ける)。
+     * (SASI/IDE は thd・nhd・hdi・slh・vhd、SCSI は hdd・nhd・hdi・hdn・hds・vhd を受け付ける)。
      */
     data class DiskTarget(
         val kind: DiskImages.Kind,
@@ -364,7 +364,7 @@ class Np2Menu(private val ctx: Context, private val host: Host) {
 
     companion object {
         const val SLOTS = 4
-        val SASI_EXTENSIONS = setOf("thd", "nhd", "hdi")
-        val SCSI_EXTENSIONS = setOf("hdd")
+        val SASI_EXTENSIONS = setOf("thd", "nhd", "hdi", "slh", "vhd")
+        val SCSI_EXTENSIONS = setOf("hdd", "nhd", "hdi", "hdn", "hds", "vhd")
     }
 }

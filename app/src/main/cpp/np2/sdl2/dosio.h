@@ -67,6 +67,7 @@ short file_close(FILEH handle);
 UINT file_getsize(FILEH handle);
 #if defined(__ANDROID__)	/* ANDROID: np2kai ‚Ì diskimage/ ‚ªŽg‚¤ */
 short file_setsize(FILEH handle, FILELEN length);
+short file_sync(FILEH handle);	/* ANDROID-SAF: np2kai ‚Ì fdd/hdd_vhd.h ‚ªŽg‚¤ */
 #endif
 short file_getdatetime(FILEH handle, DOSDATE *dosdate, DOSTIME *dostime);
 short file_delete(const char *path);

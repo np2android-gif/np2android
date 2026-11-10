@@ -26,6 +26,12 @@ const OEMCHAR str_hdi[] = OEMTEXT("hdi");
 const OEMCHAR str_fdi[] = OEMTEXT("fdi");
 const OEMCHAR str_hdd[] = OEMTEXT("hdd");
 const OEMCHAR str_nhd[] = OEMTEXT("nhd");
+#if defined(__ANDROID__)	/* ANDROID-SAF: np2kai の fdd/sxsihdd.c が使う */
+const OEMCHAR str_vhd[] = OEMTEXT("vhd");
+const OEMCHAR str_slh[] = OEMTEXT("slh");
+const OEMCHAR str_hdn[] = OEMTEXT("hdn");
+const OEMCHAR str_hds[] = OEMTEXT("hds");
+#endif
 
 const OEMCHAR str_d[] = OEMTEXT("%d");
 const OEMCHAR str_u[] = OEMTEXT("%u");

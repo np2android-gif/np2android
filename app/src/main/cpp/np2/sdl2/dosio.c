@@ -124,6 +124,16 @@ short file_setsize(FILEH handle, FILELEN length) {
 	}
 	return(0);
 }
+
+/* ANDROID-SAF: np2kai の fdd/hdd_vhd.h (可変サイズ VHD) が使う。バッファを書き出して fsync する */
+short file_sync(FILEH handle) {
+
+	if ((fflush(handle) != 0) || (fsync(fileno(handle)) != 0)) {
+		safio_ioerror(handle);
+		return(-1);
+	}
+	return(0);
+}
 #endif
 
 UINT file_getsize(FILEH handle) {

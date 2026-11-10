@@ -21,8 +21,11 @@ object DiskImages {
          */
         FDD(setOf("d88", "88d", "d98", "98d", "fdi", "xdf", "hdm", "dup", "2hd", "tfd", "nfd", "fdd", "flp", "img",
             "dcp", "dcu", "hdb")),
-        /** SASI/IDE: thd・nhd・hdi、SCSI: hdd */
-        HDD(setOf("thd", "nhd", "hdi", "hdd")),
+        /**
+         * SASI/IDE: thd・nhd・hdi・slh・vhd、SCSI: hdd・nhd・hdi・hdn・hds・vhd
+         * (slh・hdn・hds・vhd は np2kai の fdd/sxsihdd.c)
+         */
+        HDD(setOf("thd", "nhd", "hdi", "hdd", "slh", "hdn", "hds", "vhd")),
     }
 
     /** エミュレータの作業フォルダ (np2.cfg・ROM・ステートセーブの置き場所) */

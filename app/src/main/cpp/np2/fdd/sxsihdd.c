@@ -1,13 +1,17 @@
-#include	"compiler.h"
-#include	"strres.h"
-#include	"dosio.h"
-#include	"sysmng.h"
-#include	"cpucore.h"
-#include	"pccore.h"
-#include	"sxsi.h"
+#include	<compiler.h>
+#include	<common/strres.h>
+#include	<dosio.h>
+#include	<sysmng.h>
+#include	<cpucore.h>
+#include	<pccore.h>
+#include	<fdd/sxsi.h>
+#ifdef SUPPORT_VPCVHD
+#include "hdd_vpc.h"
+#endif
 
 const char sig_vhd[8] = "VHD1.00";
 const char sig_nhd[15] = "T98HDDIMAGE.R0";
+const char sig_slh[] = "HDIM";
 
 const SASIHDD sasihdd[7] = {
 				{33, 4, 153},			// 5MB
@@ -35,10 +39,10 @@ static BRESULT hdd_reopen(SXSIDEV sxsi) {
 	}
 }
 
-static REG8 hdd_read(SXSIDEV sxsi, long pos, UINT8 *buf, UINT size) {
+static REG8 hdd_read(SXSIDEV sxsi, FILEPOS pos, UINT8 *buf, UINT size) {
 
 	FILEH	fh;
-	long	r;
+	FILEPOS	r;
 	UINT	rsize;
 
 	if (sxsi_prepare(sxsi) != SUCCESS) {
@@ -54,7 +58,7 @@ static REG8 hdd_read(SXSIDEV sxsi, long pos, UINT8 *buf, UINT size) {
 		return(0xd0);
 	}
 	while(size) {
-		rsize = min(size, sxsi->size);
+		rsize = MIN(size, sxsi->size);
 		CPU_REMCLOCK -= rsize;
 		if (file_read(fh, buf, rsize) != rsize) {
 			return(0xd0);
@@ -65,10 +69,10 @@ static REG8 hdd_read(SXSIDEV sxsi, long pos, UINT8 *buf, UINT size) {
 	return(0x00);
 }
 
-static REG8 hdd_write(SXSIDEV sxsi, long pos, const UINT8 *buf, UINT size) {
+static REG8 hdd_write(SXSIDEV sxsi, FILEPOS pos, const UINT8 *buf, UINT size) {
 
 	FILEH	fh;
-	long	r;
+	FILEPOS	r;
 	UINT	wsize;
 
 	if (sxsi_prepare(sxsi) != SUCCESS) {
@@ -84,7 +88,7 @@ static REG8 hdd_write(SXSIDEV sxsi, long pos, const UINT8 *buf, UINT size) {
 		return(0xd0);
 	}
 	while(size) {
-		wsize = min(size, sxsi->size);
+		wsize = MIN(size, sxsi->size);
 		CPU_REMCLOCK -= wsize;
 		if (file_write(fh, buf, wsize) != wsize) {
 			return(0x70);
@@ -95,10 +99,10 @@ static REG8 hdd_write(SXSIDEV sxsi, long pos, const UINT8 *buf, UINT size) {
 	return(0x00);
 }
 
-static REG8 hdd_format(SXSIDEV sxsi, long pos) {
+static REG8 hdd_format(SXSIDEV sxsi, FILEPOS pos) {
 
 	FILEH	fh;
-	long	r;
+	FILEPOS	r;
 	UINT16	i;
 	UINT8	work[256];
 	UINT	size;
@@ -120,7 +124,7 @@ static REG8 hdd_format(SXSIDEV sxsi, long pos) {
 	for (i=0; i<sxsi->sectors; i++) {
 		size = sxsi->size;
 		while(size) {
-			wsize = min(size, sizeof(work));
+			wsize = MIN(size, sizeof(work));
 			size -= wsize;
 			CPU_REMCLOCK -= wsize;
 			if (file_write(fh, work, wsize) != wsize) {
@@ -139,7 +143,7 @@ static void hdd_close(SXSIDEV sxsi) {
 
 // ----
 
-// SASI‹KŠiHDD‚©ƒ`ƒFƒbƒN
+// SASIè¦æ ¼HDDã‹ãƒã‚§ãƒƒã‚¯
 static UINT8 gethddtype(SXSIDEV sxsi) {
 
 const SASIHDD	*sasi;
@@ -163,7 +167,7 @@ BRESULT sxsihdd_open(SXSIDEV sxsi, const OEMCHAR *fname) {
 	FILEH		fh;
 const OEMCHAR	*ext;
 	REG8		iftype;
-	long		totals;
+	FILEPOS		totals;
 	UINT32		headersize;
 	UINT32		surfaces;
 	UINT32		cylinders;
@@ -186,9 +190,9 @@ const OEMCHAR	*ext;
 		cylinders = LOADINTELWORD(thd.cylinders);
 		sectors = 33;
 		size = 256;
-		totals = cylinders * sectors * surfaces;
+		totals = (FILEPOS)cylinders * sectors * surfaces;
 	}
-	else if ((iftype == SXSIDRV_SASI) && (!file_cmpname(ext, str_nhd))) {
+	else if ((iftype == SXSIDRV_SASI || iftype == SXSIDRV_SCSI) && (!file_cmpname(ext, str_nhd))) {
 		NHDHDR nhd;						// T98Next HDD (IDE)
 		if ((file_read(fh, &nhd, sizeof(nhd)) != sizeof(nhd)) ||
 			(memcmp(nhd.sig, sig_nhd, 15))) {
@@ -199,9 +203,9 @@ const OEMCHAR	*ext;
 		cylinders = LOADINTELDWORD(nhd.cylinders);
 		sectors = LOADINTELWORD(nhd.sectors);
 		size = LOADINTELWORD(nhd.sectorsize);
-		totals = cylinders * sectors * surfaces;
+		totals = (FILEPOS)cylinders * sectors * surfaces;
 	}
-	else if ((iftype == SXSIDRV_SASI) && (!file_cmpname(ext, str_hdi))) {
+	else if ((iftype == SXSIDRV_SASI || iftype == SXSIDRV_SCSI) && (!file_cmpname(ext, str_hdi))) {
 		HDIHDR hdi;						// ANEX86 HDD (SASI) thanx Mamiya
 		if (file_read(fh, &hdi, sizeof(hdi)) != sizeof(hdi)) {
 			goto sxsiope_err2;
@@ -211,7 +215,7 @@ const OEMCHAR	*ext;
 		cylinders = LOADINTELDWORD(hdi.cylinders);
 		sectors = LOADINTELDWORD(hdi.sectors);
 		size = LOADINTELDWORD(hdi.sectorsize);
-		totals = cylinders * sectors * surfaces;
+		totals = (FILEPOS)cylinders * sectors * surfaces;
 	}
 	else if ((iftype == SXSIDRV_SCSI) && (!file_cmpname(ext, str_hdd))) {
 		VHDHDR vhd;						// Virtual98 HDD (SCSI)
@@ -226,11 +230,64 @@ const OEMCHAR	*ext;
 		size = LOADINTELWORD(vhd.sectorsize);
 		totals = (SINT32)LOADINTELDWORD(vhd.totals);
 	}
+	else if ((iftype == SXSIDRV_SCSI) && (!file_cmpname(ext, str_hdn))) {
+		// RaSCSI flat disk image for NEC PC-9801-55
+		FILELEN fsize = file_getsize(fh);
+		headersize = 0;
+		size = 512;
+		surfaces = 8;
+#if defined(__ANDROID__)	/* ANDROID-SAF: np2cfg ã« rascsi92 ãŒç„¡ã„ã®ã§ 0 (25 ã‚»ã‚¯ã‚¿) ã«å›ºå®šã™ã‚‹ */
+		if(0){
+#else
+		if(np2cfg.rascsi92){
+#endif
+			sectors = 32;
+		}else{
+			sectors = 25;
+		}
+		cylinders = (UINT32)(fsize / ((FILELEN)sectors * surfaces * size));
+		totals = fsize / size;
+		// totals = (FILEPOS)cylinders * sectors * surfaces;
+	}
+	else if ((iftype == SXSIDRV_SCSI) && (!file_cmpname(ext, str_hds))) {
+		// RaSCSI flat disk image
+		FILELEN fsize = file_getsize(fh);
+		headersize = 0;
+		size = 512;
+		surfaces = 8;
+		sectors = 32;
+		cylinders = (UINT32)(fsize / ((FILELEN)sectors * surfaces * size));
+		totals = fsize / size;
+		// totals = (FILEPOS)cylinders * sectors * surfaces;
+	}
+	else if ((iftype == SXSIDRV_SASI) && (!file_cmpname(ext, str_slh))) {
+		SLHHDR slh;						// SL9821 HDD (IDE)
+		if ((file_read(fh, &slh, sizeof(slh)) != sizeof(slh)) ||
+			(memcmp(slh.sig, sig_slh, 4))) {
+			goto sxsiope_err2;
+		}
+		headersize = 512;
+		surfaces = LOADINTELDWORD(slh.surfaces);
+		cylinders = LOADINTELDWORD(slh.cylinders);
+		sectors = LOADINTELDWORD(slh.sectors);
+		size = LOADINTELDWORD(slh.sectorsize);
+		totals = (FILEPOS)cylinders * sectors * surfaces;
+	}
+#ifdef SUPPORT_VPCVHD
+	else if ((iftype == SXSIDRV_SASI || iftype == SXSIDRV_SCSI) && (!file_cmpname(ext, str_vhd))) {
+		// Microsoft VirtualPC VHD (SASI/IDE)
+		BRESULT rc = sxsihdd_vpcvhd_mount(sxsi, fh);
+		if (rc == FAILURE) {
+			file_close(fh);
+		}
+		return (rc);
+	}
+#endif
 	else {
 		goto sxsiope_err2;
 	}
 
-	// ƒtƒH[ƒ}ƒbƒgŠm”F`
+	// ãƒ•ã‚©ãƒ¼ãƒžãƒƒãƒˆç¢ºèªã€œ
 	if ((surfaces == 0) || (surfaces >= 256) ||
 		(cylinders == 0) || (cylinders >= 65536) ||
 		(sectors == 0) || (sectors >= 256) ||
@@ -265,3 +322,7 @@ sxsiope_err1:
 	return(FAILURE);
 }
 
+#ifdef SUPPORT_VPCVHD
+#define HDD_VPC_INCLUDE
+#include "hdd_vhd.h"
+#endif
