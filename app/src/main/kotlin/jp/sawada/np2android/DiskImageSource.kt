@@ -4,7 +4,9 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.provider.OpenableColumns
+import android.os.ParcelFileDescriptor
 import android.system.Os
+import android.system.OsConstants
 import android.util.Log
 import org.json.JSONArray
 import org.json.JSONObject
@@ -141,11 +143,17 @@ object DiskImageSource {
         val result = register(context, id, uri, name, kind, readOnlyIfNotLocal)
         if (result is Result.Ok) {
             remember(context, result.entry)
-        } else if (synchronized(this) { entries(context).none { it.uri == uri } }) {
-            // 使えなかったファイルの権限は持ち続けない
-            releasePermission(context, uri)
+        } else if (result !is Result.NotLocal) {
+            // 使えなかったファイルの権限は持ち続けない。NotLocal はユーザーが「読み取り専用で開く」を
+            // 選ぶかもしれないので残す (一度解放すると永続権限を取り直せない)。選ばなかったら [discard]
+            discard(context, uri)
         }
         return result
+    }
+
+    /** 履歴に無い [uri] の永続権限を解放する (選んだが使わなかったファイル) */
+    fun discard(context: Context, uri: Uri) {
+        if (synchronized(this) { entries(context).none { it.uri == uri } }) releasePermission(context, uri)
     }
 
     /** 履歴のイメージを使う直前に登録し直す (fd を取り直す) */
@@ -257,6 +265,12 @@ object DiskImageSource {
             null
         }
 
+        // パイプなどは端末のストレージかどうか以前に使えない (先に調べないと NotLocal 扱いになる)
+        if (!isSeekableFile(rw ?: probe, name)) {
+            rw?.close()
+            probe.close()
+            return Result.NotSeekable(name)
+        }
         val local = isLocalStorage((rw ?: probe).fd, name)
         if (!local && !allowNonLocal) {
             rw?.close()
@@ -284,6 +298,19 @@ object DiskImageSource {
         val local = real != null && LOCAL_PREFIXES.any { real.startsWith(it) }
         Log.i(TAG, "fd of $name -> $real (${if (local) "local" else "not local"})")
         return local
+    }
+
+    /** 通常ファイルでランダムアクセスできるか (クラウド系などはパイプを返すことがある) */
+    private fun isSeekableFile(pfd: ParcelFileDescriptor, name: String): Boolean {
+        val ok = runCatching {
+            val fd = pfd.fileDescriptor
+            OsConstants.S_ISREG(Os.fstat(fd).st_mode) && Os.lseek(fd, 0, OsConstants.SEEK_CUR) >= 0
+        }.getOrElse {
+            Log.w(TAG, "seek check failed: $name", it)
+            false
+        }
+        if (!ok) Log.i(TAG, "$name is not a seekable regular file")
+        return ok
     }
 
     private val LOCAL_PREFIXES = listOf("/storage/", "/mnt/", "/data/media/", "/sdcard/")

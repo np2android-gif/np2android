@@ -341,13 +341,17 @@ class Np2Activity : SDLActivity(), KeyboardController.Actions, Np2Menu.Host, Set
                 b.show()
             }
             is DiskImageSource.Result.NotLocal -> {
+                // 「読み取り専用で開く」以外で閉じたら、取っておいた永続権限を解放する
+                var keep = false
                 val b = dialog()
                     .setTitle(R.string.disk_not_local_title)
                     .setMessage(getString(R.string.disk_not_local_message, result.name))
                     .setNeutralButton(R.string.cancel, null)
+                    .setOnDismissListener { if (!keep && copyUri != null) DiskImageSource.discard(this, copyUri) }
                 if (copyUri != null) {
                     val flags = pendingFlags
                     b.setPositiveButton(R.string.disk_open_readonly) { _, _ ->
+                        keep = true
                         onDirectPicked(target, copyUri, flags, readOnlyIfNotLocal = true)
                     }
                     b.setNegativeButton(R.string.disk_copy) { _, _ -> importPicked(target, copyUri) }
