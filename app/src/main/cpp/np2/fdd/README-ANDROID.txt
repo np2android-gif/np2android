@@ -13,8 +13,9 @@ np2kai (https://github.com/AZO234/NP2kai) の fdd/ から、HDD イメージの�
 増えた形式 (形式は np2kai と同じく拡張子で決める)
   SASI/IDE: .slh (SL9821)、.vhd (VirtualPC の固定・可変サイズ)
   SCSI    : .nhd・.hdi、.hdn・.hds (RaSCSI のベタ)、.vhd
-  ただし、いまの Android 版は IA-32 (PC-9821) 構成で SUPPORT_SCSI を定義していないので、
-  SCSI のドライブは使えない (fdd/sxsi.h の SCSIHDD_MAX が 0)。
+  SCSI は port/compiler.h で SUPPORT_SCSI を定義して有効にしている (IA-32 構成で IDE と併用。
+  np2kai の IA-32 構成と同じ)。SCSI のディスクをつないだときだけ SCSI ボード (BIOS は d2000h) が
+  有効になる。ステートセーブには SCSI の節が増えるが、SCSI の節が無い古いセーブもロードできる。
 
 Android 向けの変更 (np2kai を更新して取り込み直すときに、同じ変更を入れ直すこと)
   - 変更箇所には /* ANDROID-SAF */ の印を付けている
@@ -23,7 +24,7 @@ Android 向けの変更 (np2kai を更新して取り込み直すときに、同
   - hdd_vhd.h: xnp2 の common.h に無いビッグエンディアンのマクロ (LOADMOTOROLA*・
     STOREMOTOROLA*) を np2kai の common.h から写して定義した
   - 取り込んだファイル以外の変更
-    port/compiler.h  : SUPPORT_VPCVHD と MIN を定義
+    port/compiler.h  : SUPPORT_VPCVHD・SUPPORT_SCSI と MIN を定義
     common/strres.c/h: str_vhd・str_slh・str_hdn・str_hds を追加
     sdl2/dosio.c/h   : file_sync (fflush と fsync) を追加 (可変サイズの VHD が使う)
 

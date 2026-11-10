@@ -167,6 +167,8 @@ typedef	signed char			BOOL;
 #define	SUPPORT_PC9821
 #define	SUPPORT_CRT31KHZ
 #define	SUPPORT_IDEIO
+/* SCSI HDD (PC-9801-55 相当)。np2kai の IA-32 構成も IDE と併用している */
+#define	SUPPORT_SCSI
 #define	msgbox(title, msg)	SDL_Log("%s: %s", (title), (msg))
 #else
 /* PC-9801 (i286) 構成 */
