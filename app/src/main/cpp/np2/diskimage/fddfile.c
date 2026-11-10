@@ -16,6 +16,9 @@
 #include	"diskimage/fd/fdd_bkdsk.h"	//	追加(Kai1)
 #include	"diskimage/fd/fdd_nfd.h"	//	追加(Kai1)
 #include	"diskimage/fd/fdd_vfdd.h"	//	追加(Kai1)
+#if defined(__ANDROID__)
+#include	"diskimage/fddsniff_android.h"	/* ANDROID-SAF */
+#endif
 
 
 	_FDDFILE	fddfile[MAX_FDDFILE];
@@ -146,6 +149,14 @@ const OEMCHAR	*p;
 //
 		else {
 			fddtype = FTYPE_BETA;
+#if defined(__ANDROID__)	/* ANDROID-SAF: ベタ扱いの拡張子は、先にヘッダーで NFD・VFDD・D88 かを調べる */
+			{
+				UINT sniffed = fdd_sniff_android(fname);
+				if (sniffed != FTYPE_NONE) {
+					fddtype = sniffed;
+				}
+			}
+#endif
 		}
 	}
 	fdd = fddfile + drv;

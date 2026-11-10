@@ -16,6 +16,10 @@ xnp2 の fdd/fddfile.c・fdd_d88.c・fdd_xdf.c・d88head.h は削除し、fdd/fd
 Android 向けの変更 (np2kai を更新して取り込み直すときに、同じ変更を入れ直すこと)
   - 変更箇所には /* ANDROID */ または /* ANDROID-SAF */ の印を付けている
   - fddfile.c: np2cfg.fddfile (この版の np2cfg には無い) への書き込みを外した
+  - fddfile.c: fdd_set() で拡張子からベタと決まったとき、fddsniff_android.c の
+    fdd_sniff_android() でヘッダーを調べ、NFD・VFDD・D88 ならその形式で開く
+    (中身が D88 や NFD の .hdb などを開くため)。fddsniff_android.c/.h はこの移植で追加した
+    ファイルで、np2kai には無い
   - fd/fdd_d88.c / fdd_d88.h: fddd88_flush() を追加 (バックグラウンドへ移るときにトラック
     バッファを書き戻す。port/taskmng.c から呼ぶ)
   - io/fdc.c・bios/bios1b.c: np2kai の SUPPORT_KAI_IMAGES の部分だけを移植した。
