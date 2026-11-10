@@ -36,6 +36,8 @@ object DiskImageSource {
         val kind: DiskImages.Kind,
         val readOnly: Boolean,
         val lastUsed: Long,
+        /** 実体が端末のストレージに無いので、ユーザーの選択で読み取り専用として開いている */
+        val nonLocal: Boolean = false,
     ) {
         /** 登録済みならこの接頭辞の仮想パスになっている */
         val pathPrefix get() = "saf:/$id/"
@@ -46,11 +48,13 @@ object DiskImageSource {
         data class Ok(val entry: Entry, val path: String) : Result()
         /** 拡張子が [kind] に合わない */
         data class Unsupported(val name: String) : Result()
-        /**
-         * パイプなどシークできない、または実体が端末のストレージに無い (クラウド系プロバイダーが
-         * 自分のキャッシュの fd を返す場合など、書き込みが元の場所に届かない)。コピー方式なら使える
-         */
+        /** パイプなどシークできない。コピー方式なら使える */
         data class NotSeekable(val name: String) : Result()
+        /**
+         * シークできるが、実体が端末のストレージに無い (クラウド系プロバイダーが自分のキャッシュの
+         * fd を返す場合など、書き込みが元の場所に届かないおそれがある)。読み取り専用かコピー方式なら使える
+         */
+        data class NotLocal(val name: String) : Result()
         /** 権限が無い・ファイルが無い */
         data class NotFound(val name: String) : Result()
     }
@@ -76,6 +80,7 @@ object DiskImageSource {
                         kind = DiskImages.Kind.valueOf(o.getString("kind")),
                         readOnly = o.optBoolean("ro"),
                         lastUsed = o.optLong("used"),
+                        nonLocal = o.optBoolean("nl"),
                     )
                 }
             }.onFailure { Log.e(TAG, "history broken", it) }
@@ -94,7 +99,8 @@ object DiskImageSource {
                 .put("name", e.name)
                 .put("kind", e.kind.name)
                 .put("ro", e.readOnly)
-                .put("used", e.lastUsed))
+                .put("used", e.lastUsed)
+                .put("nl", e.nonLocal))
         }
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY, a.toString()).apply()
     }
@@ -110,8 +116,11 @@ object DiskImageSource {
      * ファイル選択 (ACTION_OPEN_DOCUMENT) の結果を登録する。
      * [flags] は結果の Intent の flags (永続権限として取れる範囲を判断する)。
      * ブロックすることがあるので、ワーカースレッドから呼ぶこと。
+     * [readOnlyIfNotLocal] = true なら、実体が端末のストレージに無いファイルも読み取り専用で開く
+     * (false なら [Result.NotLocal] を返すので、ユーザーに選ばせてから true で呼び直す)。
      */
-    fun openPicked(context: Context, uri: Uri, flags: Int, target: Np2Menu.DiskTarget): Result {
+    fun openPicked(context: Context, uri: Uri, flags: Int, target: Np2Menu.DiskTarget,
+                   readOnlyIfNotLocal: Boolean = false): Result {
         val kind = target.kind
         val name = queryName(context, uri)
         if (!target.accepts(name)) return Result.Unsupported(name)
@@ -129,7 +138,7 @@ object DiskImageSource {
 
         val id = synchronized(this) { entries(context).firstOrNull { it.uri == uri }?.id }
             ?: UUID.randomUUID().toString().replace("-", "").take(16)
-        val result = register(context, id, uri, name, kind)
+        val result = register(context, id, uri, name, kind, readOnlyIfNotLocal)
         if (result is Result.Ok) {
             remember(context, result.entry)
         } else if (synchronized(this) { entries(context).none { it.uri == uri } }) {
@@ -141,7 +150,7 @@ object DiskImageSource {
 
     /** 履歴のイメージを使う直前に登録し直す (fd を取り直す) */
     fun reopen(context: Context, entry: Entry): Result {
-        val result = register(context, entry.id, entry.uri, entry.name, entry.kind)
+        val result = register(context, entry.id, entry.uri, entry.name, entry.kind, entry.nonLocal)
         if (result is Result.Ok) {
             remember(context, result.entry)
         } else if (result is Result.NotFound) {
@@ -151,16 +160,26 @@ object DiskImageSource {
     }
 
     /**
-     * 起動時に履歴を全部登録する。レジュームファイルや np2.cfg に残った仮想パスを開けるよう、
-     * エミュレータスレッドが動き出す前 (onCreate) に呼ぶ。
+     * 起動時に、np2.cfg・レジューム・ステートスロットが参照している履歴だけを登録する。
+     * これらに残った仮想パスはコアが起動直後やロード時に直接開くので、エミュレータスレッドが
+     * 動き出す前 (onCreate) に呼ぶこと。それ以外の履歴は、メニューから挿入するときに登録する
+     * (開きっぱなしの fd を履歴の件数だけ持たないように)。
      * @return 開けなくなって履歴から外したイメージの表示名
      */
-    fun registerAll(context: Context): List<String> {
+    fun registerReferenced(context: Context): List<String> {
+        val referenced = referencedIds(context)
         val persisted = context.contentResolver.persistedUriPermissions
             .filter { it.isReadPermission }.map { it.uri }.toSet()
         val lost = mutableListOf<String>()
         for (e in synchronized(this) { entries(context).toList() }) {
-            val r = if (e.uri in persisted) register(context, e.id, e.uri, e.name, e.kind) else Result.NotFound(e.name)
+            if (e.uri !in persisted) {
+                // 権限が無くなった (アプリのデータ消去など)。参照の有無にかかわらず使えない
+                forget(context, e)
+                lost += e.name
+                continue
+            }
+            if (e.id !in referenced) continue
+            val r = register(context, e.id, e.uri, e.name, e.kind, e.nonLocal)
             if (r is Result.NotFound) {
                 forget(context, e)
                 lost += e.name
@@ -172,13 +191,52 @@ object DiskImageSource {
     }
 
     /**
+     * np2.cfg・レジューム (np2sdl2.sav)・ステートスロット (np2sdl2.s00〜) に書かれた仮想パスの ID。
+     * どれも仮想パスをそのままの文字列で持っている (ステートは STATPATH 構造体の path)。
+     */
+    private fun referencedIds(context: Context): Set<String> {
+        val dir = DiskImages.dataDir(context)
+        val files = listOf("np2.cfg", "np2sdl2.sav") + (0 until Np2Menu.SLOTS).map { "np2sdl2.s%02d".format(it) }
+        val ids = mutableSetOf<String>()
+        val prefix = "saf:/".toByteArray()
+        for (f in files.map { java.io.File(dir, it) }.filter { it.isFile }) {
+            val b = runCatching { f.readBytes() }.getOrNull() ?: continue
+            var i = 0
+            while (i <= b.size - prefix.size) {
+                if (b[i] == prefix[0] && (prefix.indices).all { b[i + it] == prefix[it] }) {
+                    val start = i + prefix.size
+                    var end = start
+                    while (end < b.size && end - start < 40 && isIdByte(b[end])) end++
+                    if (end < b.size && b[end] == '/'.code.toByte() && end > start) {
+                        ids += String(b, start, end - start, Charsets.US_ASCII)
+                    }
+                    i = end
+                } else {
+                    i++
+                }
+            }
+        }
+        Log.i(TAG, "referenced at startup: $ids")
+        return ids
+    }
+
+    private fun isIdByte(c: Byte): Boolean {
+        val ch = c.toInt().toChar()
+        return ch in '0'..'9' || ch in 'a'..'z' || ch in 'A'..'Z' || ch == '-' || ch == '_'
+    }
+
+    /**
      * URI を開いてネイティブに登録する。"rw" で開けなければ "r" のまま読み取り専用にする。
      * "w" は使わない (プロバイダーによっては中身を切り詰める)。
      *
      * 先に "r" で開いて、ファイルがあることを確かめる。DownloadsProvider の raw: URI などは
      * ファイルが無いと "rw" で空のファイルを作ってしまうため (削除済みのイメージが 0 バイトで復活する)。
+     *
+     * 実体が端末のストレージに無い場合は、[allowNonLocal] なら読み取り専用で登録し、
+     * そうでなければ [Result.NotLocal] を返す。
      */
-    private fun register(context: Context, id: String, uri: Uri, name: String, kind: DiskImages.Kind): Result {
+    private fun register(context: Context, id: String, uri: Uri, name: String, kind: DiskImages.Kind,
+                         allowNonLocal: Boolean = false): Result {
         val cr = context.contentResolver
         val probe = try {
             cr.openFileDescriptor(uri, "r")
@@ -187,9 +245,8 @@ object DiskImageSource {
             null
         } ?: return Result.NotFound(name)
 
-        var readOnly = false
-        val pfd = try {
-            cr.openFileDescriptor(uri, "rw")?.also { probe.close() }
+        val rw = try {
+            cr.openFileDescriptor(uri, "rw")
         } catch (e: Exception) {
             if (e is FileNotFoundException || e is SecurityException || e is UnsupportedOperationException ||
                 e is IllegalArgumentException) {
@@ -198,14 +255,22 @@ object DiskImageSource {
                 Log.w(TAG, "rw open failed, use read-only: $name", e)
             }
             null
-        } ?: probe.also { readOnly = true }
+        }
 
-        val path = pfd.use {
-            if (!isLocalStorage(it.fd, name)) return Result.NotSeekable(name)
-            Np2Native.safRegister(id, name, it.fd, readOnly)
-        } ?: return Result.NotSeekable(name)
-        Log.i(TAG, "opened $uri as $path ro=$readOnly")
-        return Result.Ok(Entry(id, uri, name, kind, readOnly, System.currentTimeMillis()), path)
+        val local = isLocalStorage((rw ?: probe).fd, name)
+        if (!local && !allowNonLocal) {
+            rw?.close()
+            probe.close()
+            return Result.NotLocal(name)
+        }
+        // 端末のストレージに無いものは、書き込めても読み取り専用にする (書き込みが元に届かないおそれ)
+        val pfd = if (local && rw != null) rw.also { probe.close() } else probe.also { rw?.close() }
+        val readOnly = (pfd === probe)
+
+        val path = pfd.use { Np2Native.safRegister(id, name, it.fd, readOnly) }
+            ?: return Result.NotSeekable(name)
+        Log.i(TAG, "opened $uri as $path ro=$readOnly local=$local")
+        return Result.Ok(Entry(id, uri, name, kind, readOnly, System.currentTimeMillis(), nonLocal = !local), path)
     }
 
     /**

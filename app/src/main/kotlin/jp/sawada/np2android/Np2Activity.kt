@@ -70,10 +70,17 @@ class Np2Activity : SDLActivity(), KeyboardController.Actions, Np2Menu.Host, Set
         super.onCreate(savedInstanceState)
         if (mBrokenLibraries) return
         Np2Native.loaded = true
-        // 直接オープンの履歴を、エミュレータスレッドが動き出す前に登録する
-        // (レジュームファイルや np2.cfg に残った仮想パスを、起動直後のレジュームで開けるように)
-        val lost = DiskImageSource.registerAll(this)
-        if (lost.isNotEmpty()) menu.toast(getString(R.string.disk_lost, lost.joinToString(", ")))
+        // 直接オープンの履歴のうち、np2.cfg・レジューム・ステートが参照しているものを
+        // エミュレータスレッドが動き出す前に登録する (起動直後のレジュームやロードで開けるように)。
+        // 見つからなかったものは、この後に出る np2 のレジュームの確認 (英語) より先にダイアログで知らせる
+        val lost = DiskImageSource.registerReferenced(this)
+        if (lost.isNotEmpty()) {
+            dialog()
+                .setTitle(R.string.disk_lost_title)
+                .setMessage(getString(R.string.disk_lost, lost.joinToString("\n")))
+                .setPositiveButton(R.string.ok, null)
+                .show()
+        }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             // 予測型「戻る」(targetSdk 36+ で既定) では onBackPressed が呼ばれないため、こちらで受ける
@@ -267,11 +274,15 @@ class Np2Activity : SDLActivity(), KeyboardController.Actions, Np2Menu.Host, Set
         openInBackground(entry.name, target) { DiskImageSource.reopen(this, entry) }
     }
 
-    private fun onDirectPicked(target: Np2Menu.DiskTarget, uri: Uri, flags: Int) {
+    private fun onDirectPicked(target: Np2Menu.DiskTarget, uri: Uri, flags: Int, readOnlyIfNotLocal: Boolean = false) {
         val name = DiskImages.displayName(this, uri) ?: uri.lastPathSegment ?: "disk"
         pendingCopyUri = uri
-        openInBackground(name, target) { DiskImageSource.openPicked(this, uri, flags, target) }
+        pendingFlags = flags
+        openInBackground(name, target) { DiskImageSource.openPicked(this, uri, flags, target, readOnlyIfNotLocal) }
     }
+
+    /** [pendingCopyUri] を選んだときの Intent の flags (読み取り専用で開き直すとき用) */
+    private var pendingFlags = 0
 
     /** 直接開けなかったときに、コピー方式に切り替えるための URI */
     private var pendingCopyUri: Uri? = null
@@ -326,6 +337,20 @@ class Np2Activity : SDLActivity(), KeyboardController.Actions, Np2Menu.Host, Set
                     .setNegativeButton(R.string.cancel, null)
                 if (copyUri != null) {
                     b.setPositiveButton(R.string.disk_copy) { _, _ -> importPicked(target, copyUri) }
+                }
+                b.show()
+            }
+            is DiskImageSource.Result.NotLocal -> {
+                val b = dialog()
+                    .setTitle(R.string.disk_not_local_title)
+                    .setMessage(getString(R.string.disk_not_local_message, result.name))
+                    .setNeutralButton(R.string.cancel, null)
+                if (copyUri != null) {
+                    val flags = pendingFlags
+                    b.setPositiveButton(R.string.disk_open_readonly) { _, _ ->
+                        onDirectPicked(target, copyUri, flags, readOnlyIfNotLocal = true)
+                    }
+                    b.setNegativeButton(R.string.disk_copy) { _, _ -> importPicked(target, copyUri) }
                 }
                 b.show()
             }

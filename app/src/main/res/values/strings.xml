@@ -8,21 +8,34 @@
     <string name="disk_direct_suffix">%1$s (直接)</string>
     <string name="disk_inserted">%1$s に %2$s を入れました</string>
     <string name="disk_inserted_readonly">%1$s に %2$s を入れました (書き込み禁止)</string>
-    <string name="disk_opening">%1$s
-開いています…</string>
+    <string name="disk_opening">%1$s\n開いています…</string>
     <string name="disk_unsupported_title">対応していない形式です</string>
-    <string name="disk_unsupported_message">%1$s
-
-%2$s に使える拡張子:
-%3$s</string>
+    <string name="disk_unsupported_message">%1$s\n\n%2$s に使える拡張子:\n%3$s</string>
     <string name="disk_not_seekable_title">この場所のファイルは直接開けません</string>
-    <string name="disk_not_seekable_message">%1$s は、ファイルを直接読み書きできない場所 (クラウドなど) にあります。
-作業フォルダにコピーして使いますか？</string>
+    <string name="disk_not_seekable_message">%1$s は、ファイルを直接読み書きできない場所 (クラウドなど) にあります。\n作業フォルダにコピーして使いますか？</string>
+    <string name="disk_not_local_title">端末のストレージに無いファイルです</string>
+    <string name="disk_not_local_message">%1$s の実体は端末のストレージに無いため (クラウドや他のアプリの領域など)、書き込んでも元の場所に保存されない可能性があります。\n\n読み取り専用で開くか、作業フォルダにコピーして使ってください。</string>
+    <string name="disk_open_readonly">読み取り専用で開く</string>
     <string name="disk_copy">コピーして使う</string>
     <string name="disk_not_found">ファイルが見つかりません: %1$s</string>
-    <string name="disk_lost">見つからなくなったイメージを履歴から外しました: %1$s</string>
+    <string name="disk_lost_title">ディスクイメージが見つかりません</string>
+    <string name="disk_lost">次のイメージが見つからないため、履歴から外しました (移動または削除された可能性があります)。\n\n%1$s\n\n続けて「Conflict! … not found」と表示された場合は、Yes を選ぶとそのドライブを空にして再開します。使うときは、メニューの「端末のファイルを直接開く」で選び直してください。</string>
+    <string name="disk_in_use_title">このイメージは使用中です</string>
+    <string name="disk_in_use_message">%1$s は %2$s で使用中です。\n同じイメージを2つのドライブで使うとイメージが壊れるため、%3$s には入れられません。</string>
     <string name="disk_hdd_readonly">このイメージは書き込み禁止で開きました。HDD への書き込みはエラーになります。</string>
     <string name="disk_write_error">%1$s への書き込みに失敗しました。元の場所が使えなくなっていないか確認してください。</string>
+    <string name="state_disk_not_found_hint">見つからないディスクは、ロード後にメニューの「端末のファイルを直接開く」で選び直してください。</string>
+
+    <!-- 空のディスクイメージ作成 -->
+    <string name="newdisk_menu">新しいディスクイメージを作る…</string>
+    <string name="newdisk_title">新しいディスクイメージ</string>
+    <string name="newdisk_name_title">ファイル名 (.%1$s)</string>
+    <string name="newdisk_create">作成</string>
+    <string name="newdisk_exists">%1$s はすでにあります。別の名前にしてください。</string>
+    <string name="newdisk_creating">%1$s を作成しています…</string>
+    <string name="newdisk_done">%1$s を作業フォルダ (disks) に作りました。\nFDD・HDD のメニューから選んで使えます。</string>
+    <string name="newdisk_failed">%1$s を作れませんでした</string>
+
     <string name="cancel">キャンセル</string>
     <string name="ok">OK</string>
 </resources>

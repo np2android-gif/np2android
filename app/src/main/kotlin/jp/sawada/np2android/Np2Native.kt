@@ -42,6 +42,17 @@ object Np2Native {
     @JvmStatic external fun safRegister(id: String, name: String, fd: Int, readOnly: Boolean): String?
     /** 登録を解除する。使用中のドライブがあると、その後の読み書きは失敗する */
     @JvmStatic external fun safUnregister(id: String)
+    /**
+     * 空のディスクイメージを作る (np2 の newdisk.c)。時間がかかるのでワーカースレッドから呼ぶ。
+     * [type] は NEWDISK_*、[param] は FDD なら D88 の fd_type、hdi なら SASI の型番、nhd・hdd なら MB。
+     * 作れたら true。
+     */
+    @JvmStatic external fun createDisk(path: String, type: Int, param: Int): Boolean
+    const val NEWDISK_FDD = 0
+    const val NEWDISK_HDI = 1
+    const val NEWDISK_NHD = 2
+    const val NEWDISK_VHD = 3
+
     /** 使用中 (またはリセット後に使う) ディスクイメージのパス。要素は null のことがある */
     @JvmStatic external fun getDisksInUse(): Array<String?>?
 

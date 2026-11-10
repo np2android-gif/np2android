@@ -54,6 +54,7 @@ class Np2Menu(private val ctx: Context, private val host: Host) {
             "HDD1: ${current(hdd1)}" to { diskMenu(hdd1) },
             "HDD2: ${current(hdd2)}" to { diskMenu(hdd2) },
             "SCSI HDD…" to { scsiMenu() },
+            ctx.getString(R.string.newdisk_menu) to { newDiskMenu() },
             "ステートセーブ" to { slotMenu(save = true) },
             "ステートロード" to { slotMenu(save = false) },
             "リセット" to { confirm("リセットしますか？") { Np2Native.reset() } },
@@ -84,6 +85,98 @@ class Np2Menu(private val ctx: Context, private val host: Host) {
             .show()
     }
 
+    // ---- 空のディスクイメージ作成 ----
+
+    /**
+     * 作れるイメージの種類。[type] と [params] は Np2Native.createDisk にそのまま渡す。
+     * FDD は D88 ヘッダーの fd_type (上位 4 ビットが種類)、hdi は np2 の SASI の型番、nhd・hdd は MB。
+     */
+    private class NewDiskType(val label: String, val ext: String, val type: Int,
+                              val params: List<Pair<String, Int>>)
+
+    private val newDiskTypes = listOf(
+        NewDiskType("FDD 2HD (1.25MB, d88)", "d88", Np2Native.NEWDISK_FDD, listOf("" to 0x20)),
+        NewDiskType("FDD 2DD (640KB, d88)", "d88", Np2Native.NEWDISK_FDD, listOf("" to 0x10)),
+        NewDiskType("HDD SASI (hdi)", "hdi", Np2Native.NEWDISK_HDI,
+            listOf("5MB" to 0, "10MB" to 1, "15MB" to 2, "20MB" to 3, "30MB" to 5, "40MB" to 6)),
+        NewDiskType("HDD IDE (nhd)", "nhd", Np2Native.NEWDISK_NHD,
+            listOf("20MB" to 20, "40MB" to 40, "80MB" to 80, "128MB" to 128, "256MB" to 256, "512MB" to 512)),
+        NewDiskType("HDD SCSI (hdd)", "hdd", Np2Native.NEWDISK_VHD,
+            listOf("20MB" to 20, "40MB" to 40, "80MB" to 80, "128MB" to 128, "256MB" to 256, "512MB" to 512)),
+    )
+
+    private fun newDiskMenu() {
+        builder()
+            .setTitle(R.string.newdisk_title)
+            .setItems(newDiskTypes.map { it.label }.toTypedArray()) { _, i ->
+                val t = newDiskTypes[i]
+                if (t.params.size == 1) {
+                    askNewDiskName(t, t.params[0])
+                } else {
+                    builder()
+                        .setTitle(t.label)
+                        .setItems(t.params.map { it.first }.toTypedArray()) { _, j -> askNewDiskName(t, t.params[j]) }
+                        .setNegativeButton(R.string.cancel, null)
+                        .show()
+                }
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun askNewDiskName(t: NewDiskType, param: Pair<String, Int>) {
+        val edit = android.widget.EditText(ctx).apply {
+            setText("newdisk")
+            setSingleLine()
+            selectAll()
+        }
+        val pad = (20 * ctx.resources.displayMetrics.density).toInt()
+        val box = android.widget.FrameLayout(ctx).apply {
+            setPadding(pad, pad / 2, pad, 0)
+            addView(edit)
+        }
+        builder()
+            .setTitle(ctx.getString(R.string.newdisk_name_title, t.ext))
+            .setView(box)
+            .setPositiveButton(R.string.newdisk_create) { _, _ ->
+                val base = DiskImages.sanitize(edit.text.toString()).removeSuffix(".${t.ext}")
+                createNewDisk(t, param, File(DiskImages.diskDir(ctx), "$base.${t.ext}"))
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun createNewDisk(t: NewDiskType, param: Pair<String, Int>, dest: File) {
+        if (dest.exists()) {
+            builder()
+                .setMessage(ctx.getString(R.string.newdisk_exists, dest.name))
+                .setPositiveButton(R.string.ok, null)
+                .show()
+            return
+        }
+        val progress = builder()
+            .setMessage(ctx.getString(R.string.newdisk_creating, dest.name))
+            .setCancelable(false)
+            .show()
+        val main = android.os.Handler(android.os.Looper.getMainLooper())
+        kotlin.concurrent.thread(name = "newdisk") {
+            val ok = runCatching { Np2Native.createDisk(dest.absolutePath, t.type, param.second) }
+                .getOrDefault(false)
+            main.post {
+                progress.dismiss()
+                if (ok) {
+                    builder()
+                        .setMessage(ctx.getString(R.string.newdisk_done, dest.name))
+                        .setPositiveButton(R.string.ok, null)
+                        .show()
+                } else {
+                    dest.delete()
+                    toast(ctx.getString(R.string.newdisk_failed, dest.name))
+                }
+            }
+        }
+    }
+
     private fun diskMenu(t: DiskTarget) {
         val items = mutableListOf<Pair<String, () -> Unit>>()
         items += ctx.getString(R.string.disk_open_direct) to { host.openDirect(t) }
@@ -103,8 +196,37 @@ class Np2Menu(private val ctx: Context, private val host: Host) {
             .show()
     }
 
+    /**
+     * [path] を [t] 以外のドライブが使っていれば、そのドライブ名を返す。
+     * 同じイメージを2つのドライブに入れると、ドライブごとにメモリに持つ D88 のヘッダーや
+     * HDD の FILE* のバッファが食い違ってイメージが壊れるため、二重マウントは禁止する。
+     * HDD は np2.cfg の設定 (リセット後に開くもの) で調べる。
+     */
+    private fun usedByOtherDrive(t: DiskTarget, path: String): String? {
+        val drives = (0..3).map { DiskTarget(DiskImages.Kind.FDD, it, "FDD${it + 1}") } +
+                listOf(hdd1, hdd2) + scsi
+        for (d in drives) {
+            if (d.kind == t.kind && d.drive == t.drive) continue
+            val p = if (d.kind == DiskImages.Kind.FDD) Np2Native.getFdd(d.drive) else Np2Native.getHdd(d.drive)
+            if (p == path) return d.label
+        }
+        return null
+    }
+
+    /** 二重マウントなら知らせて true を返す */
+    private fun refuseDoubleMount(t: DiskTarget, path: String, name: String): Boolean {
+        val other = usedByOtherDrive(t, path) ?: return false
+        builder()
+            .setTitle(R.string.disk_in_use_title)
+            .setMessage(ctx.getString(R.string.disk_in_use_message, name, other, t.label))
+            .setPositiveButton(R.string.ok, null)
+            .show()
+        return true
+    }
+
     /** SAF で登録した仮想パス [path] を挿入する */
     fun insertDirect(t: DiskTarget, entry: DiskImageSource.Entry, path: String) {
+        if (refuseDoubleMount(t, path, entry.name)) return
         if (t.kind == DiskImages.Kind.FDD) {
             Np2Native.setFdd(t.drive, path)
             toast(ctx.getString(if (entry.readOnly) R.string.disk_inserted_readonly else R.string.disk_inserted,
@@ -117,6 +239,7 @@ class Np2Menu(private val ctx: Context, private val host: Host) {
     }
 
     fun insert(t: DiskTarget, file: File) {
+        if (refuseDoubleMount(t, file.absolutePath, file.name)) return
         if (t.kind == DiskImages.Kind.FDD) {
             Np2Native.setFdd(t.drive, file.absolutePath)
             toast("${t.label} に ${file.name} を入れました")
@@ -193,7 +316,8 @@ class Np2Menu(private val ctx: Context, private val host: Host) {
         override fun onStateConflict(slot: Int, info: String) {
             builder()
                 .setTitle("ディスクがセーブ時と異なります")
-                .setMessage("$info\n\nこのままロードしますか？")
+                .setMessage("$info\n\nこのままロードしますか？" +
+                        if (info.contains("not found")) "\n\n" + ctx.getString(R.string.state_disk_not_found_hint) else "")
                 .setPositiveButton("ロード") { _, _ -> Np2Native.loadState(slot, true) }
                 .setNegativeButton("キャンセル", null)
                 .show()

@@ -22,6 +22,7 @@
 
 #include "fdd/fddfile.h"
 #include "fdd/sxsi.h"
+#include "fdd/newdisk.h"
 
 #define LOG_TAG "np2"
 
@@ -238,6 +239,54 @@ JNIEXPORT jstring JNICALL Java_jp_sawada_np2android_Np2Native_safRegister(JNIEnv
 	SDL_free(cid);
 	SDL_free(cname);
 	return (r == SUCCESS) ? newstring(env, path) : NULL;
+}
+
+/*
+ * 空のディスクイメージを作る (np2 の newdisk.c)。ファイルを書くだけでエミュレータの状態には
+ * 触れないので、呼び出し元のスレッド (Kotlin のワーカースレッド) でそのまま実行する。
+ * newdisk_* は結果を返さないので、作ったファイルを開いてサイズで確かめる。
+ */
+JNIEXPORT jboolean JNICALL Java_jp_sawada_np2android_Np2Native_createDisk(JNIEnv *env, jclass cls,
+								jstring path, jint type, jint param)
+{
+	char *cpath;
+	FILEH fh;
+	UINT size;
+
+	cpath = dupstring(env, path);
+	if (cpath == NULL) {
+		return JNI_FALSE;
+	}
+	switch (type) {
+		case 0:		/* FDD (D88)。param = fd_type */
+			newdisk_fdd(cpath, (REG8)param, "");
+			break;
+
+		case 1:		/* SASI (hdi)。param = SASI の型番 */
+			newdisk_hdi(cpath, (UINT)param);
+			break;
+
+		case 2:		/* IDE (nhd)。param = MB */
+			newdisk_nhd(cpath, (UINT)param);
+			break;
+
+		case 3:		/* SCSI (Virtual98 hdd)。param = MB */
+			newdisk_vhd(cpath, (UINT)param);
+			break;
+
+		default:
+			break;
+	}
+	size = 0;
+	fh = file_open_rb(cpath);
+	if (fh != FILEH_INVALID) {
+		size = file_getsize(fh);
+		file_close(fh);
+	}
+	__android_log_print(ANDROID_LOG_INFO, LOG_TAG, "newdisk type=%d param=%d %s: %u bytes",
+						(int)type, (int)param, cpath, size);
+	SDL_free(cpath);
+	return (size > 0) ? JNI_TRUE : JNI_FALSE;
 }
 
 /* 登録を解除する。使用中のドライブがあれば、その後の読み書きは失敗する */
