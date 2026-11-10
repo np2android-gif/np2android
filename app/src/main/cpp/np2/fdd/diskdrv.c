@@ -11,6 +11,9 @@
 #include "iocore.h"
 #include "fddfile.h"
 #include "sxsi.h"
+#if defined(__ANDROID__)	/* ANDROID */
+#include "np2bridge.h"
+#endif
 
 #define DISK_DELAY	20			/*!< Delay 0.4sec */
 
@@ -126,6 +129,9 @@ void diskdrv_hddbind(void)
 		if (sxsi_devopen(drv, np2cfg.sasihdd[drv & 0x0f]) != SUCCESS)
 		{
 			sxsi_setdevtype(drv, SXSIDEV_NC);
+#if defined(__ANDROID__)	/* ANDROID: 設定されているのに開けなかった HDD を Kotlin に知らせる */
+			np2bridge_hddfailed(drv, np2cfg.sasihdd[drv & 0x0f]);
+#endif
 		}
 	}
 #if defined(SUPPORT_SCSI)
@@ -135,6 +141,9 @@ void diskdrv_hddbind(void)
 		if (sxsi_devopen(drv, np2cfg.scsihdd[drv & 0x0f]) != SUCCESS)
 		{
 			sxsi_setdevtype(drv, SXSIDEV_NC);
+#if defined(__ANDROID__)	/* ANDROID */
+			np2bridge_hddfailed(drv, np2cfg.scsihdd[drv & 0x0f]);
+#endif
 		}
 	}
 #endif /* defined(SUPPORT_SCSI) */
@@ -153,7 +162,12 @@ void diskdrv_readyfddex(REG8 drv, const OEMCHAR *fname, UINT ftype, int readonly
 	{
 		if ((fname != NULL) && (fname[0] != '\0'))
 		{
+#if defined(__ANDROID__)	/* ANDROID: マウントの成否を Kotlin に知らせる (形式やサイズが合わないと失敗する) */
+			BRESULT r = fdd_set(drv, fname, ftype, readonly);
+			np2bridge_fddresult(drv, fname, (r == SUCCESS) ? TRUE : FALSE);
+#else
 			fdd_set(drv, fname, ftype, readonly);
+#endif
 			fdc.stat[drv] = FDCRLT_AI | drv;
 			fdc_interrupt();
 			sysmng_update(SYS_UPDATEFDD);

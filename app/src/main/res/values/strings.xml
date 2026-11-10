@@ -22,6 +22,9 @@
     <string name="disk_lost">次のイメージが見つからないため、履歴から外しました (移動または削除された可能性があります)。\n\n%1$s\n\n続けて「Conflict! … not found」と表示された場合は、Yes を選ぶとそのドライブを空にして再開します。使うときは、メニューの「端末のファイルを直接開く」で選び直してください。</string>
     <string name="disk_in_use_title">このイメージは使用中です</string>
     <string name="disk_in_use_message">%1$s は %2$s で使用中です。\n同じイメージを2つのドライブで使うとイメージが壊れるため、%3$s には入れられません。</string>
+    <string name="disk_mount_failed_title">ディスクイメージを使えません</string>
+    <string name="disk_mount_failed">%1$s を %2$s に入れられませんでした。\n対応していない形式か、イメージのサイズや中身が壊れている可能性があります。</string>
+    <string name="disk_hdd_failed">%2$s に設定されている %1$s を開けませんでした。%2$s は未接続として起動しています。\n対応していない形式か、イメージが壊れている・見つからない可能性があります。メニューから設定し直してください。</string>
     <string name="disk_hdd_readonly">このイメージは書き込み禁止で開きました。HDD への書き込みはエラーになります。</string>
     <string name="disk_write_error">%1$s への書き込みに失敗しました。元の場所が使えなくなっていないか確認してください。</string>
     <string name="state_disk_not_found_hint">見つからないディスクは、ロード後にメニューの「端末のファイルを直接開く」で選び直してください。</string>

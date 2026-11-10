@@ -91,7 +91,15 @@ object Np2Native {
         fun onStateConflict(slot: Int, info: String)
         /** SAF で開いたイメージ ([path] は仮想パス) への書き込みが失敗した */
         fun onDiskError(path: String)
+        /** FDD の挿入結果。[result] は FDD_MOUNTED / FDD_MOUNTED_PROTECTED / FDD_REJECTED */
+        fun onFddResult(drive: Int, result: Int, path: String)
+        /** リセット時に、設定されている HDD ([drive] は sxsi のドライブ番号) を開けなかった */
+        fun onHddFailed(drive: Int, path: String)
     }
+
+    const val FDD_MOUNTED = 0
+    const val FDD_MOUNTED_PROTECTED = 1
+    const val FDD_REJECTED = 2
 
     /** UI スレッドで呼ばれる */
     @Volatile
@@ -119,6 +127,8 @@ object Np2Native {
                 2 -> l.onStateLoaded(a, b)
                 3 -> l.onStateConflict(a, text ?: "")
                 5 -> l.onDiskError(text ?: "")
+                6 -> l.onFddResult(a, b, text ?: "")
+                7 -> l.onHddFailed(a, text ?: "")
             }
         }
     }

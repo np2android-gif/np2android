@@ -40,6 +40,15 @@ void np2bridge_onexit(void);
 /** SAF で開いたイメージへの書き込みが失敗したことを Kotlin に通知する (エミュレータスレッドから呼ぶ) */
 void np2bridge_diskerror(const char *path);
 
+/**
+ * FDD の挿入 (diskdrv_readyfddex) の結果を Kotlin に通知する (エミュレータスレッドから呼ぶ)。
+ * 形式やサイズが合わないイメージは np2 がマウントを拒否するので、失敗を表示できるようにする。
+ */
+void np2bridge_fddresult(REG8 drv, const char *path, BOOL success);
+
+/** リセット時に、設定されているのに開けなかった HDD を Kotlin に通知する (エミュレータスレッドから呼ぶ) */
+void np2bridge_hddfailed(REG8 drv, const char *path);
+
 /** taskmng_exit() (メニューの終了) で止めたとき TRUE */
 extern BOOL taskmng_userexit;
 

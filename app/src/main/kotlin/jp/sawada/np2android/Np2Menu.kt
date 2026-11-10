@@ -229,9 +229,8 @@ class Np2Menu(private val ctx: Context, private val host: Host) {
     fun insertDirect(t: DiskTarget, entry: DiskImageSource.Entry, path: String) {
         if (refuseDoubleMount(t, path, entry.name)) return
         if (t.kind == DiskImages.Kind.FDD) {
+            // 結果 (マウントできたか・書き込み禁止か) は np2 から onFddResult で届くので、そこで表示する
             Np2Native.setFdd(t.drive, path)
-            toast(ctx.getString(if (entry.readOnly) R.string.disk_inserted_readonly else R.string.disk_inserted,
-                t.label, entry.name))
         } else {
             Np2Native.setHdd(t.drive, path)
             askReset("${t.label} を ${entry.name} に変更しました。" +
@@ -242,8 +241,8 @@ class Np2Menu(private val ctx: Context, private val host: Host) {
     fun insert(t: DiskTarget, file: File) {
         if (refuseDoubleMount(t, file.absolutePath, file.name)) return
         if (t.kind == DiskImages.Kind.FDD) {
+            // 結果は np2 から onFddResult で届く
             Np2Native.setFdd(t.drive, file.absolutePath)
-            toast("${t.label} に ${file.name} を入れました")
         } else {
             Np2Native.setHdd(t.drive, file.absolutePath)
             askReset("${t.label} を ${file.name} に変更しました。")
@@ -308,6 +307,32 @@ class Np2Menu(private val ctx: Context, private val host: Host) {
                 Np2Native.LOAD_NOT_FOUND -> "スロット ${slot + 1} は空です"
                 else -> "このステートは現在の構成では読み込めません"
             })
+        }
+
+        override fun onFddResult(drive: Int, result: Int, path: String) {
+            val label = "FDD${drive + 1}"
+            val name = File(path).name
+            when (result) {
+                Np2Native.FDD_MOUNTED -> toast(ctx.getString(R.string.disk_inserted, label, name))
+                Np2Native.FDD_MOUNTED_PROTECTED -> toast(ctx.getString(R.string.disk_inserted_readonly, label, name))
+                else -> builder()
+                    .setTitle(R.string.disk_mount_failed_title)
+                    .setMessage(ctx.getString(R.string.disk_mount_failed, name, label))
+                    .setPositiveButton(R.string.ok, null)
+                    .show()
+            }
+        }
+
+        override fun onHddFailed(drive: Int, path: String) {
+            val label = when {
+                drive < 0x20 -> "HDD${drive + 1}"
+                else -> "SCSI #${drive - 0x20}"
+            }
+            builder()
+                .setTitle(R.string.disk_mount_failed_title)
+                .setMessage(ctx.getString(R.string.disk_hdd_failed, File(path).name, label))
+                .setPositiveButton(R.string.ok, null)
+                .show()
         }
 
         override fun onDiskError(path: String) {

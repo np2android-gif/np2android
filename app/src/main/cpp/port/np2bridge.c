@@ -36,7 +36,9 @@ enum {
 	EV_STATE_LOADED		= 2,	/* a = slot, b = 0:成功 / 1:失敗(非互換) / 2:ファイル無し */
 	EV_STATE_CONFLICT	= 3,	/* a = slot, text = 差分情報 (force 付きで再ロードするか確認) */
 	EV_USER_EXIT		= 4,	/* メニューから終了した (Activity 終了後にプロセスも終わらせてよい) */
-	EV_DISK_ERROR		= 5		/* text = SAF の仮想パス。書き込みに失敗した */
+	EV_DISK_ERROR		= 5,	/* text = SAF の仮想パス。書き込みに失敗した */
+	EV_FDD_SET			= 6,	/* a = drive, b = 0:成功 / 1:成功 (書き込み禁止) / 2:失敗, text = パス */
+	EV_HDD_FAILED		= 7		/* a = sxsi drive, text = パス。リセット時に開けなかった */
 };
 
 static jclass		s_nativeClass;
@@ -469,6 +471,30 @@ static void stateload(int slot, BOOL force)
 void np2bridge_diskerror(const char *path)
 {
 	notify(EV_DISK_ERROR, 0, 0, path);
+}
+
+void np2bridge_fddresult(REG8 drv, const char *path, BOOL success)
+{
+	int result;
+
+	if (!success) {
+		result = 2;
+	}
+	else {
+		result = fdd_diskprotect(drv) ? 1 : 0;
+	}
+	__android_log_print(success ? ANDROID_LOG_INFO : ANDROID_LOG_WARN, LOG_TAG,
+						"fdd%d: %s %s", (int)drv, path, success ? "mounted" : "rejected");
+	notify(EV_FDD_SET, drv, result, path);
+}
+
+void np2bridge_hddfailed(REG8 drv, const char *path)
+{
+	if ((path == NULL) || (path[0] == '\0')) {
+		return;		/* 設定されていないだけ */
+	}
+	__android_log_print(ANDROID_LOG_WARN, LOG_TAG, "hdd%02x: %s rejected", (int)drv, path);
+	notify(EV_HDD_FAILED, drv, 0, path);
 }
 
 void np2bridge_onexit(void)
