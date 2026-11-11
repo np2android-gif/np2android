@@ -17,7 +17,7 @@ object AboutDialog {
     private val components = listOf(
         Component("Neko Project II / Xnp2", "修正 BSD ライセンス", "np2.txt"),
         Component("IA-32 CPU コア (i386c)", "BSD ライセンス (NONAKA Kimihiro)", "i386c.txt"),
-        Component("NP2kai (FDD イメージの処理)", "MIT ライセンス / BSD ライセンス", "np2kai.txt"),
+        Component("NP2kai (FDD・HDD・CD-ROM イメージの処理)", "MIT ライセンス / BSD ライセンス", "np2kai.txt"),
         Component("SDL2", "zlib ライセンス", "sdl2.txt"),
         Component("zlib", "zlib ライセンス", "zlib.txt"),
     )

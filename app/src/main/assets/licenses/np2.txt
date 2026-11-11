@@ -15,4 +15,4 @@ Xnp2 の README (11.2. 著作権) より:
   作者は責任を負いません。
 
 IA-32 CPU コア (i386c) は別途「IA-32 CPU コア」のライセンスに従います。
-FDD イメージの処理 (diskimage/) は NP2kai のものを使用しています (「NP2kai」参照)。
+FDD・HDD・CD-ROM イメージの処理 (diskimage/、fdd/sxsihdd.c など) は NP2kai のものを使用しています (「NP2kai」参照)。

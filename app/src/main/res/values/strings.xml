@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Neko Project II</string>
+    <string name="app_name">Neko Project II for Android</string>
 
     <!-- SAF によるディスクイメージの直接オープン -->
     <string name="disk_open_direct">＋ 端末のファイルを直接開く…</string>
@@ -50,7 +50,7 @@
 
     <!-- このアプリについて -->
     <string name="about_menu">このアプリについて</string>
-    <string name="about_title">Neko Project II %1$s</string>
+    <string name="about_title">Neko Project II for Android %1$s</string>
 
     <string name="cancel">キャンセル</string>
     <string name="ok">OK</string>
