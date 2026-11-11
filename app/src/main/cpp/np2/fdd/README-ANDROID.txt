@@ -34,8 +34,12 @@ CD-ROM (sxsicd)
   CD-ROM は xnp2 のコード (sxsicd.c・cbus/ideio.c・cbus/atapicmd.c) をそのまま使っている。np2kai からは
   取り込んでいない (np2kai の ideio.c は構造体が大きくなり、ステートセーブの互換性がなくなるため)。
   ドライブは IDE のセカンダリ・マスター (sxsi のドライブ番号 0x02) で、IDE が有効なら常につながっている。
-  読める形式は iso (2048 バイト/セクタ)、データだけの生イメージ (2352 バイト/セクタ)。
-  コアは変更していない。入れ替えは port/np2bridge.c の cdset() で行う。sxsi_devopen() は前のイメージを
+  読める形式は iso (2048 バイト/セクタ)、データだけの生イメージ (2352 バイト/セクタ)、
+  .bin が 1 つの .cue (音楽トラックを含む。CD-DA の再生は xnp2 の ideio.c)。
+  sxsicd.c の変更は 1 か所: .cue の INDEX 00 (プリギャップ) をトラックとして数えない
+  (xnp2 は INDEX の行をすべてトラックにするので、プリギャップのある .cue で TOC のトラックが重複する)。
+  .cue が名前で開く .bin は、port/android_safio.c で .cue と同じ ID に付けた付属ファイルとして開く。
+  それ以外のコアは変更していない。入れ替えは port/np2bridge.c の cdset() で行う。sxsi_devopen() は前のイメージを
   閉じないので、必ず sxsi_devclose() してから開く。CD のパスは np2.cfg に保存されないので、アプリの設定に
   保存し、起動時に sdl2/np2.c から np2bridge_startupcd() で入れ直す (/* ANDROID-SAF */ の印あり)。
   ゲスト側の例 (MS-DOS 6.2): CONFIG.SYS に DEVICE=NECCDD.SYS /D:CD101 と LASTDRIVE=Z、

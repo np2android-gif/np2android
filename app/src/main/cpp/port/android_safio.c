@@ -30,6 +30,7 @@ typedef struct {
 	dev_t	dev;			/* 書き込みエラーの FILE* がどのエントリーか調べる用 */
 	ino_t	ino;
 	UINT32	lasterror;		/* 最後にエラーを通知した時刻 (連続して通知しない) */
+	int		subfd;			/* 付属ファイル (.cue の .bin)。-1 = 無し。読み取り専用 */
 } SAFENTRY;
 
 static SAFENTRY			s_entry[SAFIO_MAX];
@@ -44,6 +45,7 @@ static void init_locked(void)
 	if (!s_init) {
 		for (i = 0; i < SAFIO_MAX; i++) {
 			s_entry[i].fd = -1;
+			s_entry[i].subfd = -1;
 		}
 		s_init = TRUE;
 	}
@@ -71,6 +73,39 @@ static SAFENTRY *find_path_locked(const char *path)
 		}
 	}
 	return NULL;
+}
+
+/*
+ * 付属ファイルを持つエントリーで、path が同じ ID の別の名前 ("saf:/<id>/<何か>") なら返す。
+ * .cue の FILE 行の名前は、大文字小文字やフォルダ名の付け方が SAF の表示名と合わないことが
+ * あるので、名前は比べない (付属ファイルは 1 つだけなので取り違えない)。
+ */
+static SAFENTRY *find_sub_locked(const char *path)
+{
+	size_t len;
+	int i;
+
+	if (!safio_isvirtual(path)) {
+		return NULL;
+	}
+	path += sizeof(SAFIO_PREFIX) - 1;
+	for (i = 0; i < SAFIO_MAX; i++) {
+		if ((s_entry[i].fd >= 0) && (s_entry[i].subfd >= 0)) {
+			len = strlen(s_entry[i].id);
+			if ((strncmp(path, s_entry[i].id, len) == 0) && (path[len] == '/')) {
+				return &s_entry[i];
+			}
+		}
+	}
+	return NULL;
+}
+
+static void close_sub_locked(SAFENTRY *e)
+{
+	if (e->subfd >= 0) {
+		close(e->subfd);
+		e->subfd = -1;
+	}
 }
 
 BOOL safio_isvirtual(const char *path)
@@ -183,6 +218,7 @@ BRESULT safio_register(const char *id, const char *name, int fd, BOOL readonly,
 		LOGI("register: replace id=%s fd %d -> %d", id, e->fd, newfd);
 		close(e->fd);
 		e->fd = -1;
+		close_sub_locked(e);
 	}
 	else {
 		for (i = 0; i < SAFIO_MAX; i++) {
@@ -211,6 +247,40 @@ BRESULT safio_register(const char *id, const char *name, int fd, BOOL readonly,
 	return SUCCESS;
 }
 
+BRESULT safio_register_sub(const char *id, int fd)
+{
+	struct stat sb;
+	SAFENTRY *e;
+	int newfd;
+
+	if ((id == NULL) || (!valid_id(id))) {
+		return FAILURE;
+	}
+	if ((fstat(fd, &sb) != 0) || (!S_ISREG(sb.st_mode)) || (lseek(fd, 0, SEEK_CUR) < 0)) {
+		LOGE("register sub: fd %d is not a seekable regular file (id=%s)", fd, id);
+		return FAILURE;
+	}
+	newfd = fcntl(fd, F_DUPFD_CLOEXEC, 0);
+	if (newfd < 0) {
+		LOGE("register sub: dup(%d) failed: %s", fd, strerror(errno));
+		return FAILURE;
+	}
+	pthread_mutex_lock(&s_lock);
+	init_locked();
+	e = find_id_locked(id);
+	if (e == NULL) {
+		pthread_mutex_unlock(&s_lock);
+		LOGE("register sub: id=%s is not registered", id);
+		close(newfd);
+		return FAILURE;
+	}
+	close_sub_locked(e);
+	e->subfd = newfd;
+	pthread_mutex_unlock(&s_lock);
+	LOGI("register sub: id=%s fd=%d size=%lld", id, newfd, (long long)sb.st_size);
+	return SUCCESS;
+}
+
 void safio_unregister(const char *id)
 {
 	SAFENTRY *e;
@@ -225,6 +295,7 @@ void safio_unregister(const char *id)
 		LOGI("unregister: %s fd=%d", e->path, e->fd);
 		close(e->fd);
 		e->fd = -1;
+		close_sub_locked(e);
 		e->path[0] = '\0';
 		e->id[0] = '\0';
 	}
@@ -235,6 +306,7 @@ FILE *safio_fopen(const char *path, const char *mode)
 {
 	SAFENTRY *e;
 	BOOL write;
+	int srcfd;
 	int newfd;
 	FILE *fp;
 
@@ -249,6 +321,17 @@ FILE *safio_fopen(const char *path, const char *mode)
 	pthread_mutex_lock(&s_lock);
 	init_locked();
 	e = find_path_locked(path);
+	srcfd = (e != NULL) ? e->fd : -1;
+	if (e == NULL) {
+		/* .cue から名前で開かれる .bin */
+		e = find_sub_locked(path);
+		if (e != NULL) {
+			srcfd = e->subfd;
+			if (write) {
+				mode = "rb";
+			}
+		}
+	}
 	if (e == NULL) {
 		pthread_mutex_unlock(&s_lock);
 		LOGE("open: %s: not registered", path);
@@ -258,7 +341,7 @@ FILE *safio_fopen(const char *path, const char *mode)
 		mode = "rb";
 	}
 	/* 位置は dup 元と共有されるが、np2 は読み書きの前に必ずシークするので問題ない */
-	newfd = fcntl(e->fd, F_DUPFD_CLOEXEC, 0);
+	newfd = fcntl(srcfd, F_DUPFD_CLOEXEC, 0);
 	pthread_mutex_unlock(&s_lock);
 	if (newfd < 0) {
 		LOGE("open: %s: dup failed: %s", path, strerror(errno));
@@ -285,7 +368,12 @@ short safio_attr(const char *path)
 	pthread_mutex_lock(&s_lock);
 	init_locked();
 	e = find_path_locked(path);
-	attr = (e == NULL) ? -1 : (e->readonly ? FILEATTR_READONLY : 0);
+	if (e == NULL) {
+		attr = (find_sub_locked(path) != NULL) ? FILEATTR_READONLY : -1;
+	}
+	else {
+		attr = e->readonly ? FILEATTR_READONLY : 0;
+	}
 	pthread_mutex_unlock(&s_lock);
 	return attr;
 }

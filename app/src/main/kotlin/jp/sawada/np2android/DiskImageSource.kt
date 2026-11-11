@@ -40,6 +40,9 @@ object DiskImageSource {
         val lastUsed: Long,
         /** 実体が端末のストレージに無いので、ユーザーの選択で読み取り専用として開いている */
         val nonLocal: Boolean = false,
+        /** .cue が使う .bin (CD-ROM のみ)。本体と同じ ID に読み取り専用で付ける */
+        val subUri: Uri? = null,
+        val subName: String? = null,
     ) {
         /** 登録済みならこの接頭辞の仮想パスになっている */
         val pathPrefix get() = "saf:/$id/"
@@ -83,6 +86,8 @@ object DiskImageSource {
                         readOnly = o.optBoolean("ro"),
                         lastUsed = o.optLong("used"),
                         nonLocal = o.optBoolean("nl"),
+                        subUri = o.optString("sub").takeIf { it.isNotEmpty() }?.let { Uri.parse(it) },
+                        subName = o.optString("subname").takeIf { it.isNotEmpty() },
                     )
                 }
             }.onFailure { Log.e(TAG, "history broken", it) }
@@ -102,7 +107,9 @@ object DiskImageSource {
                 .put("kind", e.kind.name)
                 .put("ro", e.readOnly)
                 .put("used", e.lastUsed)
-                .put("nl", e.nonLocal))
+                .put("nl", e.nonLocal)
+                .put("sub", e.subUri?.toString() ?: "")
+                .put("subname", e.subName ?: ""))
         }
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY, a.toString()).apply()
     }
@@ -122,7 +129,7 @@ object DiskImageSource {
      * (false なら [Result.NotLocal] を返すので、ユーザーに選ばせてから true で呼び直す)。
      */
     fun openPicked(context: Context, uri: Uri, flags: Int, target: Np2Menu.DiskTarget,
-                   readOnlyIfNotLocal: Boolean = false): Result {
+                   readOnlyIfNotLocal: Boolean = false, subUri: Uri? = null): Result {
         val kind = target.kind
         val name = queryName(context, uri)
         if (!target.accepts(name)) return Result.Unsupported(name)
@@ -138,28 +145,37 @@ object DiskImageSource {
             runCatching { cr.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
                 .onFailure { e -> Log.w(TAG, "takePersistableUriPermission failed: $uri", e) }
         }
+        if (subUri != null) {
+            runCatching { cr.takePersistableUriPermission(subUri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+                .onFailure { e -> Log.w(TAG, "takePersistableUriPermission failed: $subUri", e) }
+        }
+        val subName = subUri?.let { queryName(context, it) }
 
         val id = synchronized(this) { entries(context).firstOrNull { it.uri == uri }?.id }
             ?: UUID.randomUUID().toString().replace("-", "").take(16)
-        val result = register(context, id, uri, name, kind, readOnlyIfNotLocal)
+        val result = register(context, id, uri, name, kind, readOnlyIfNotLocal, subUri, subName)
         if (result is Result.Ok) {
             remember(context, result.entry)
         } else if (result !is Result.NotLocal) {
             // 使えなかったファイルの権限は持ち続けない。NotLocal はユーザーが「読み取り専用で開く」を
             // 選ぶかもしれないので残す (一度解放すると永続権限を取り直せない)。選ばなかったら [discard]
             discard(context, uri)
+            subUri?.let { discard(context, it) }
         }
         return result
     }
 
     /** 履歴に無い [uri] の永続権限を解放する (選んだが使わなかったファイル) */
     fun discard(context: Context, uri: Uri) {
-        if (synchronized(this) { entries(context).none { it.uri == uri } }) releasePermission(context, uri)
+        if (synchronized(this) { entries(context).none { it.uri == uri || it.subUri == uri } }) {
+            releasePermission(context, uri)
+        }
     }
 
     /** 履歴のイメージを使う直前に登録し直す (fd を取り直す) */
     fun reopen(context: Context, entry: Entry): Result {
-        val result = register(context, entry.id, entry.uri, entry.name, entry.kind, entry.nonLocal)
+        val result = register(context, entry.id, entry.uri, entry.name, entry.kind, entry.nonLocal,
+            entry.subUri, entry.subName)
         if (result is Result.Ok) {
             remember(context, result.entry)
         } else if (result is Result.NotFound) {
@@ -181,14 +197,14 @@ object DiskImageSource {
             .filter { it.isReadPermission }.map { it.uri }.toSet()
         val lost = mutableListOf<String>()
         for (e in synchronized(this) { entries(context).toList() }) {
-            if (e.uri !in persisted) {
+            if (e.uri !in persisted || (e.subUri != null && e.subUri !in persisted)) {
                 // 権限が無くなった (アプリのデータ消去など)。参照の有無にかかわらず使えない
                 forget(context, e)
                 lost += e.name
                 continue
             }
             if (e.id !in referenced) continue
-            val r = register(context, e.id, e.uri, e.name, e.kind, e.nonLocal)
+            val r = register(context, e.id, e.uri, e.name, e.kind, e.nonLocal, e.subUri, e.subName)
             if (r is Result.NotFound) {
                 forget(context, e)
                 lost += e.name
@@ -247,7 +263,7 @@ object DiskImageSource {
      * そうでなければ [Result.NotLocal] を返す。
      */
     private fun register(context: Context, id: String, uri: Uri, name: String, kind: DiskImages.Kind,
-                         allowNonLocal: Boolean = false): Result {
+                         allowNonLocal: Boolean = false, subUri: Uri? = null, subName: String? = null): Result {
         val cr = context.contentResolver
         val probe = try {
             cr.openFileDescriptor(uri, "r")
@@ -289,7 +305,31 @@ object DiskImageSource {
         val path = pfd.use { Np2Native.safRegister(id, name, it.fd, readOnly) }
             ?: return Result.NotSeekable(name)
         Log.i(TAG, "opened $uri as $path ro=$readOnly local=$local")
-        return Result.Ok(Entry(id, uri, name, kind, readOnly, System.currentTimeMillis(), nonLocal = !local), path)
+        if (subUri != null) {
+            val r = registerSub(context, id, subUri, subName ?: "bin")
+            if (r != null) {
+                Np2Native.safUnregister(id)
+                return r
+            }
+        }
+        return Result.Ok(Entry(id, uri, name, kind, readOnly, System.currentTimeMillis(), nonLocal = !local,
+            subUri = subUri, subName = subName), path)
+    }
+
+    /** .cue が使う .bin を読み取り専用で開いて [id] に付ける。失敗したらその結果を返す */
+    private fun registerSub(context: Context, id: String, uri: Uri, name: String): Result? {
+        val pfd = try {
+            context.contentResolver.openFileDescriptor(uri, "r")
+        } catch (e: Exception) {
+            Log.w(TAG, "open failed: $name (${e.javaClass.simpleName}: ${e.message})")
+            null
+        } ?: return Result.NotFound(name)
+        pfd.use {
+            if (!isSeekableFile(it, name)) return Result.NotSeekable(name)
+            if (!Np2Native.safRegisterSub(id, it.fd)) return Result.NotSeekable(name)
+        }
+        Log.i(TAG, "opened $uri as sub of $id ($name)")
+        return null
     }
 
     /**
@@ -397,6 +437,7 @@ object DiskImageSource {
         Log.i(TAG, "release ${entry.name} (${entry.id})")
         Np2Native.safUnregister(entry.id)
         releasePermission(context, entry.uri)
+        entry.subUri?.let { releasePermission(context, it) }
     }
 
     private fun releasePermission(context: Context, uri: Uri) {

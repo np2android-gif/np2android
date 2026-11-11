@@ -39,7 +39,15 @@ BOOL safio_isvirtual(const char *path);
 BRESULT safio_register(const char *id, const char *name, int fd, BOOL readonly,
 														char *path, int size);
 
-/** ID の登録を解除する。開いている FILE* はそのまま使える */
+/**
+ * 登録済みの ID に、読み取り専用の付属ファイル (.cue が名前で開く .bin) を 1 つ付ける。
+ * その ID の仮想パスのうち、本体以外の名前 ("saf:/<id>/<何か>") を開くと付属ファイルが開く。
+ * 本体を登録し直すと付属ファイルは外れるので、そのたびに付け直すこと。
+ * @return SUCCESS / FAILURE (ID が未登録、シークできない fd など)
+ */
+BRESULT safio_register_sub(const char *id, int fd);
+
+/** ID の登録を解除する (付属ファイルも)。開いている FILE* はそのまま使える */
 void safio_unregister(const char *id);
 
 /**

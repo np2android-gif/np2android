@@ -183,8 +183,21 @@ class Np2Activity : SDLActivity(), KeyboardController.Actions, Np2Menu.Host, Set
         if (requestCode == REQUEST_OPEN_DIRECT) {
             val target = pendingDirect ?: return
             pendingDirect = null
-            val uri = data?.data ?: return
-            if (resultCode == RESULT_OK) onDirectPicked(target, uri, data.flags)
+            if (resultCode != RESULT_OK || data == null) return
+            // CD-ROM は .cue と .bin を一緒に選べる (複数選択)
+            val clip = data.clipData
+            val uris = if (clip != null) (0 until clip.itemCount).map { clip.getItemAt(it).uri }
+                       else listOfNotNull(data.data)
+            if (uris.isEmpty()) return
+            if (target.kind == DiskImages.Kind.CD) onCdPicked(target, uris, data.flags)
+            else onDirectPicked(target, uris[0], data.flags)
+            return
+        }
+        if (requestCode == REQUEST_PICK_BIN) {
+            val p = pendingCue ?: return
+            pendingCue = null
+            val bin = data?.data?.takeIf { resultCode == RESULT_OK } ?: return
+            onDirectPicked(p.target, p.cue, p.flags, subUri = bin)
             return
         }
         if (requestCode != REQUEST_IMPORT) return
@@ -268,6 +281,8 @@ class Np2Activity : SDLActivity(), KeyboardController.Actions, Np2Menu.Host, Set
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION or
                     // CD-ROM は読み取りの権限だけを求める
                     if (target.kind == DiskImages.Kind.CD) 0 else Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+        // CD-ROM は .cue と .bin を一緒に選べるようにする
+        if (target.kind == DiskImages.Kind.CD) intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
         @Suppress("DEPRECATION")
         startActivityForResult(intent, REQUEST_OPEN_DIRECT)
     }
@@ -277,11 +292,72 @@ class Np2Activity : SDLActivity(), KeyboardController.Actions, Np2Menu.Host, Set
         openInBackground(entry.name, target) { DiskImageSource.reopen(this, entry) }
     }
 
-    private fun onDirectPicked(target: Np2Menu.DiskTarget, uri: Uri, flags: Int, readOnlyIfNotLocal: Boolean = false) {
+    private fun onDirectPicked(target: Np2Menu.DiskTarget, uri: Uri, flags: Int, readOnlyIfNotLocal: Boolean = false,
+                               subUri: Uri? = null) {
         val name = DiskImages.displayName(this, uri) ?: uri.lastPathSegment ?: "disk"
         pendingCopyUri = uri
         pendingFlags = flags
-        openInBackground(name, target) { DiskImageSource.openPicked(this, uri, flags, target, readOnlyIfNotLocal) }
+        openInBackground(name, target) {
+            DiskImageSource.openPicked(this, uri, flags, target, readOnlyIfNotLocal, subUri)
+        }
+    }
+
+    /** .bin を選んでもらっている間の .cue */
+    private class PendingCue(val target: Np2Menu.DiskTarget, val cue: Uri, val flags: Int)
+    private var pendingCue: PendingCue? = null
+
+    /**
+     * CD-ROM のファイル選択の結果。.cue が含まれていれば、.cue に書かれた .bin を選ばれたものの中から探し、
+     * 無ければ .bin を選んでもらう。.cue の読み取りはブロックすることがあるのでワーカースレッドで行う。
+     */
+    private fun onCdPicked(target: Np2Menu.DiskTarget, uris: List<Uri>, flags: Int) {
+        thread(name = "cue-check") {
+            val names = uris.map { DiskImages.displayName(this, it) ?: it.lastPathSegment ?: "disk" }
+            val cueIndex = names.indexOfFirst { it.substringAfterLast('.', "").equals("cue", ignoreCase = true) }
+            val files = if (cueIndex >= 0) CueSheet.files(this, uris[cueIndex]) else null
+            runOnUiThread {
+                when {
+                    cueIndex < 0 && uris.size == 1 -> onDirectPicked(target, uris[0], flags)
+                    cueIndex < 0 -> message(getString(R.string.cd_pick_one))
+                    files == null -> menu.toast(getString(R.string.disk_not_found, names[cueIndex]))
+                    files.isEmpty() -> message(getString(R.string.cd_cue_nofile, names[cueIndex]))
+                    files.size > 1 -> message(getString(R.string.cd_cue_multi, names[cueIndex]))
+                    else -> {
+                        val want = files[0].substringAfterLast('/').substringAfterLast(BACKSLASH)
+                        val others = uris.indices.filter { it != cueIndex }
+                        val bin = others.firstOrNull { names[it].equals(want, ignoreCase = true) }
+                            ?: others.singleOrNull()
+                        if (bin != null) {
+                            onDirectPicked(target, uris[cueIndex], flags, subUri = uris[bin])
+                        } else {
+                            askBin(PendingCue(target, uris[cueIndex], flags), names[cueIndex], want)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /** .cue が使う .bin を選んでもらう */
+    private fun askBin(p: PendingCue, cueName: String, binName: String) {
+        dialog()
+            .setTitle(R.string.cd_pick_bin_title)
+            .setMessage(getString(R.string.cd_pick_bin_message, cueName, binName))
+            .setPositiveButton(R.string.cd_pick_bin_button) { _, _ ->
+                pendingCue = p
+                val intent = Intent(Intent.ACTION_OPEN_DOCUMENT)
+                    .addCategory(Intent.CATEGORY_OPENABLE)
+                    .setType("*/*")
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+                @Suppress("DEPRECATION")
+                startActivityForResult(intent, REQUEST_PICK_BIN)
+            }
+            .setNegativeButton(R.string.cancel, null)
+            .show()
+    }
+
+    private fun message(text: String) {
+        dialog().setMessage(text).setPositiveButton(R.string.ok, null).show()
     }
 
     /** [pendingCopyUri] を選んだときの Intent の flags (読み取り専用で開き直すとき用) */
@@ -738,6 +814,8 @@ class Np2Activity : SDLActivity(), KeyboardController.Actions, Np2Menu.Host, Set
         private const val REQUEST_IMPORT = 1001
         private const val REQUEST_KEYMAP = 1002
         private const val REQUEST_OPEN_DIRECT = 1003
+        private const val REQUEST_PICK_BIN = 1004
+        private const val BACKSLASH = '\\'
         /** keymap ファイルの読み込み上限 (旧版の表は数 KB) */
         private const val MAX_KEYMAP_BYTES = 64 * 1024
         /**

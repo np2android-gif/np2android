@@ -319,6 +319,19 @@ JNIEXPORT jboolean JNICALL Java_jp_sawada_np2android_Np2Native_createDisk(JNIEnv
 }
 
 /* 登録を解除する。使用中のドライブがあれば、その後の読み書きは失敗する */
+/* .cue が使う .bin を、登録済みの ID に付ける (android_safio.h)。fd は C 側で dup する */
+JNIEXPORT jboolean JNICALL Java_jp_sawada_np2android_Np2Native_safRegisterSub(JNIEnv *env, jclass cls,
+								jstring id, jint fd)
+{
+	char *cid;
+	BRESULT r;
+
+	cid = dupstring(env, id);
+	r = (cid != NULL) ? safio_register_sub(cid, fd) : FAILURE;
+	SDL_free(cid);
+	return (r == SUCCESS) ? JNI_TRUE : JNI_FALSE;
+}
+
 NP2JNI(safUnregister)(JNIEnv *env, jclass cls, jstring id)
 {
 	char *cid;

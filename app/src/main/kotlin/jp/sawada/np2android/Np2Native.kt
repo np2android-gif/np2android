@@ -49,6 +49,12 @@ object Np2Native {
      * id は履歴が持つ固定の ID (英数字・'-'・'_')。シークできない fd などで失敗したら null。
      */
     @JvmStatic external fun safRegister(id: String, name: String, fd: Int, readOnly: Boolean): String?
+    /**
+     * [safRegister] で登録した [id] に、.cue が名前で開く .bin を読み取り専用で付ける。
+     * その ID の仮想パスのうち本体 (.cue) 以外の名前を開くと、この fd が開く。
+     * [safRegister] で登録し直すと外れるので、そのたびに付け直す。失敗したら false
+     */
+    @JvmStatic external fun safRegisterSub(id: String, fd: Int): Boolean
     /** 登録を解除する。使用中のドライブがあると、その後の読み書きは失敗する */
     @JvmStatic external fun safUnregister(id: String)
     /**

@@ -332,6 +332,11 @@ static BRESULT opencue(SXSIDEV sxsi, const OEMCHAR *fname) {
 			}
 		}
 		else if ((argc >= 3) && (!milstr_cmp(argv[0], str_index))) {
+#if defined(__ANDROID__)	/* ANDROID-SAF: INDEX 00 (プリギャップ) をトラックとして数えない */
+			if (milstr_solveINT(argv[1]) != 1) {
+				continue;
+			}
+#endif
 			if (idx < NELEMENTS(trk)) {
 				trk[idx].type = curtype;
 				trk[idx].track = curtrk;
