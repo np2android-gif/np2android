@@ -91,6 +91,24 @@ object Np2Native {
      * ユーザーが了承したら force = true で呼び直す。
      */
     @JvmStatic external fun loadState(slot: Int, force: Boolean)
+    /**
+     * 起動時のレジュームの確認 ([Listener.onResumeConflict]) への答え。エミュレータは答えが来るまで待っている。
+     * [RESUME_LOAD] / [RESUME_SKIP] (レジュームせずに起動) / [RESUME_EXIT] (終了)
+     */
+    fun answerResume(answer: Int) {
+        pendingResume = null
+        nativeAnswerResume(answer)
+    }
+    @JvmStatic private external fun nativeAnswerResume(answer: Int)
+    const val RESUME_LOAD = 0
+    const val RESUME_SKIP = 1
+    const val RESUME_EXIT = 2
+
+    /** 答えを待っているレジュームの確認 (差分情報)。Activity が作り直されたときに出し直す */
+    @Volatile
+    var pendingResume: String? = null
+        private set
+
     /** エミュレータを終了する (終了後 SDLActivity が Activity を閉じる) */
     @JvmStatic external fun exit()
 
@@ -103,7 +121,12 @@ object Np2Native {
     interface Listener {
         fun onStateSaved(slot: Int, success: Boolean)
         fun onStateLoaded(slot: Int, result: Int)
+        /** [info] は 1 行に 1 台、"名前	種類	セーブ時	今" ([StateDiskCheck] で読む) */
         fun onStateConflict(slot: Int, info: String)
+        /** 起動時のレジュームでディスクが違う。[answerResume] で答えるまでエミュレータは待つ */
+        fun onResumeConflict(info: String)
+        /** 起動時のレジュームのステートが、今の構成では読めなかった (レジュームせずに起動した) */
+        fun onResumeFailed()
         /** SAF で開いたイメージ ([path] は仮想パス) への書き込みが失敗した */
         fun onDiskError(path: String)
         /** FDD の挿入結果。[result] は FDD_MOUNTED / FDD_MOUNTED_PROTECTED / FDD_REJECTED */
@@ -142,6 +165,7 @@ object Np2Native {
             userExited = true
             return
         }
+        if (type == 9 && b == 0) pendingResume = text ?: ""
         mainHandler.post {
             val l = listener ?: return@post
             when (type) {
@@ -152,6 +176,7 @@ object Np2Native {
                 6 -> l.onFddResult(a, b, text ?: "")
                 7 -> l.onHddFailed(a, text ?: "")
                 8 -> l.onCdResult(b, text ?: "")
+                9 -> if (b == 0) l.onResumeConflict(text ?: "") else l.onResumeFailed()
             }
         }
     }

@@ -19,6 +19,7 @@
 #include "sysmenu.h"
 #include "taskmng.h"
 #include "android_safio.h"
+#include "sysmng.h"
 
 #include "fdd/fddfile.h"
 #include "fdd/sxsi.h"
@@ -39,7 +40,8 @@ enum {
 	EV_DISK_ERROR		= 5,	/* text = SAF の仮想パス。書き込みに失敗した */
 	EV_FDD_SET			= 6,	/* a = drive, b = 0:成功 / 1:成功 (書き込み禁止) / 2:失敗, text = パス */
 	EV_HDD_FAILED		= 7,	/* a = sxsi drive, text = パス。リセット時に開けなかった */
-	EV_CD_SET			= 8		/* b = 0:挿入 / 1:失敗 / 2:ドライブ無し (IDE 無効) / 3:取り出し, text = パス */
+	EV_CD_SET			= 8,	/* b = 0:挿入 / 1:失敗 / 2:ドライブ無し (IDE 無効) / 3:取り出し, text = パス */
+	EV_RESUME			= 9		/* b = 0:ディスクが違う (text = 差分。answerResume で答える) / 1:読めない */
 };
 
 static jclass		s_nativeClass;
@@ -460,6 +462,220 @@ JNIEXPORT jobjectArray JNICALL Java_jp_sawada_np2android_Np2Native_getDisksInUse
 
 /* ---- エミュレータスレッド側 ------------------------------------------- */
 
+/* ---- ステートのディスクの確認 (16 章) ---- */
+
+/* checkdisks() の戻り値に足すビット: Kotlin に確認するべき違いがある */
+#define CHECK_CONFLICT	0x10000
+
+#define DISKCHECK_MAX	16
+
+typedef struct {
+	char	dv[8];				/* "FDD1" / "SASI1" / "SCSI0" など (statsave.c の名前) */
+	int		state;				/* 0: 変わっていない / 1: 書き換えられた / 2: 見つからない */
+	char	path[MAX_PATH];		/* セーブ時のパス ("" = 空) */
+} DISKCHECK;
+
+static DISKCHECK s_diskcheck[DISKCHECK_MAX];
+static int s_diskchecks;
+
+static void diskcheck_cb(const char *dvname, const char *path, int state)
+{
+	DISKCHECK *d;
+
+	if (s_diskchecks >= DISKCHECK_MAX) {
+		return;
+	}
+	d = &s_diskcheck[s_diskchecks++];
+	SDL_strlcpy(d->dv, dvname, sizeof(d->dv));
+	SDL_strlcpy(d->path, path, sizeof(d->path));
+	d->state = state;
+}
+
+/* 今そのドライブで開いているファイル ("" = 無し) */
+static const char *sxsi_now(REG8 drv)
+{
+	SXSIDEV sxsi;
+
+	sxsi = sxsi_getptr(drv);
+	if ((sxsi != NULL) && (sxsi->flag & SXSIFLAG_READY)) {
+		return sxsi->fname;
+	}
+	return "";
+}
+
+static const char *fdd_now(REG8 drv)
+{
+	const char *name;
+
+	if (!fdd_diskready(drv)) {
+		return "";
+	}
+	name = fdd_diskname(drv);
+	return (name != NULL) ? name : "";
+}
+
+/* statsave.c の名前 → ドライブ番号。FDD なら *isfdd = TRUE */
+static BOOL dvdrive(const char *dv, REG8 *drv, BOOL *isfdd)
+{
+	int n;
+
+	if (SDL_strncmp(dv, "FDD", 3) == 0) {
+		n = SDL_atoi(dv + 3) - 1;
+		*isfdd = TRUE;
+	}
+	else if (SDL_strncmp(dv, "SASI", 4) == 0) {
+		n = SDL_atoi(dv + 4) - 1;
+		*isfdd = FALSE;
+	}
+	else if (SDL_strncmp(dv, "SCSI", 4) == 0) {
+		n = 0x20 + SDL_atoi(dv + 4);
+		*isfdd = FALSE;
+	}
+	else {
+		return FALSE;
+	}
+	if (n < 0) {
+		return FALSE;
+	}
+	*drv = (REG8)n;
+	return TRUE;
+}
+
+/* HDD (CD-ROM 以外の sxsi のドライブ) か。違いがあれば確認を出す */
+static BOOL ishdd(REG8 drv)
+{
+	return (drv == 0x00) || (drv == 0x01) || (drv >= 0x20);
+}
+
+static void addline(char *info, int size, const char *dv, const char *kind, const char *saved, const char *now)
+{
+	char line[300];
+
+	SDL_snprintf(line, sizeof(line), "%s\t%s\t%s\t%s\n", dv, kind,
+				 (saved[0]) ? file_getname(saved) : "", (now[0]) ? file_getname(now) : "");
+	SDL_strlcat(info, line, size);
+}
+
+/*
+ * ステートのディスクを今の状態と比べる。statsave_check() の結果を返し、Kotlin に確認するべき違いが
+ * あれば CHECK_CONFLICT を足す (セーブ後に書き換えられた・見つからない HDD などがある、または
+ * HDD が今つながっているものと違う)。info には違いを 1 行ずつ "名前\t種類\tセーブ時\t今\n" で入れる。
+ * 種類: updated (書き換えられた) / notfound (見つからない) / change (ロードで切り替わる) /
+ *       gone (ロードで外れる)。ファイル名だけを入れる (表示用)
+ */
+static int checkdisks(const char *path, char *info, int size)
+{
+	char err[1024];
+	BOOL seen[0x24];
+	BOOL conflict;
+	BOOL isfdd;
+	REG8 drv;
+	const char *now;
+	int ret;
+	int i;
+
+	info[0] = '\0';
+	err[0] = '\0';
+	s_diskchecks = 0;
+	statsave_diskcb = diskcheck_cb;
+	ret = statsave_check(path, err, sizeof(err));
+	statsave_diskcb = NULL;
+	if (ret & (~STATFLAG_DISKCHG)) {
+		return ret;
+	}
+	conflict = (ret & STATFLAG_DISKCHG) ? TRUE : FALSE;
+	SDL_memset(seen, 0, sizeof(seen));
+	for (i = 0; i < s_diskchecks; i++) {
+		DISKCHECK *d = &s_diskcheck[i];
+		if (!dvdrive(d->dv, &drv, &isfdd)) {
+			continue;
+		}
+		now = (isfdd) ? fdd_now(drv) : sxsi_now(drv);
+		if (!isfdd && drv < NELEMENTS(seen)) {
+			seen[drv] = TRUE;
+		}
+		if (d->state == 1) {
+			addline(info, size, d->dv, "updated", d->path, now);
+		}
+		else if (d->state == 2) {
+			addline(info, size, d->dv, "notfound", d->path, now);
+		}
+		else if (d->path[0] == '\0') {
+			/* セーブ時は空。FDD はそのまま (ロードで取り出されない)、sxsi は外れる */
+			if ((!isfdd) && (now[0])) {
+				addline(info, size, d->dv, "gone", d->path, now);
+				conflict |= ishdd(drv);
+			}
+		}
+		else if (SDL_strcmp(d->path, now) != 0) {
+			addline(info, size, d->dv, "change", d->path, now);
+			if (!isfdd) {
+				conflict |= ishdd(drv);
+			}
+		}
+	}
+	/* セーブ時につながっていなかった sxsi のドライブは、ロードで外れる */
+	for (drv = 0; drv < NELEMENTS(seen); drv++) {
+		char dv[8];
+		if ((drv >= 0x04) && (drv < 0x20)) {
+			continue;
+		}
+		if (seen[drv]) {
+			continue;
+		}
+		now = sxsi_now(drv);
+		if (now[0] == '\0') {
+			continue;
+		}
+		if (drv < 0x20) {
+			SDL_snprintf(dv, sizeof(dv), "SASI%d", drv + 1);
+		}
+		else {
+			SDL_snprintf(dv, sizeof(dv), "SCSI%d", drv - 0x20);
+		}
+		addline(info, size, dv, "gone", "", now);
+		conflict |= ishdd(drv);
+	}
+	if (conflict) {
+		ret |= CHECK_CONFLICT;
+		__android_log_print(ANDROID_LOG_INFO, "NP2SAF", "state check: %s", info);
+	}
+	return ret;
+}
+
+/*
+ * ロードのあと、np2.cfg の HDD を実際に開いているファイルに合わせる (メニューの表示と次のリセットを
+ * ロードした状態と一致させる)。CD-ROM は np2.cfg に無いので Kotlin 側 (onStateLoaded) で合わせる
+ */
+static void syncdisks(void)
+{
+	BOOL changed = FALSE;
+	const char *now;
+	REG8 drv;
+
+	for (drv = 0; drv < 2; drv++) {
+		now = (sxsi_getdevtype(drv) == SXSIDEV_HDD) ? sxsi_now(drv) : "";
+		if (SDL_strcmp(np2cfg.sasihdd[drv], now) != 0) {
+			__android_log_print(ANDROID_LOG_INFO, "NP2SAF", "sync hdd%d: %s -> %s", drv, np2cfg.sasihdd[drv], now);
+			file_cpyname(np2cfg.sasihdd[drv], now, NELEMENTS(np2cfg.sasihdd[0]));
+			changed = TRUE;
+		}
+	}
+#if defined(SUPPORT_SCSI)
+	for (drv = 0; drv < 4; drv++) {
+		now = (sxsi_getdevtype((REG8)(0x20 + drv)) == SXSIDEV_HDD) ? sxsi_now((REG8)(0x20 + drv)) : "";
+		if (SDL_strcmp(np2cfg.scsihdd[drv], now) != 0) {
+			__android_log_print(ANDROID_LOG_INFO, "NP2SAF", "sync scsi%d: %s -> %s", drv, np2cfg.scsihdd[drv], now);
+			file_cpyname(np2cfg.scsihdd[drv], now, NELEMENTS(np2cfg.scsihdd[0]));
+			changed = TRUE;
+		}
+	}
+#endif
+	if (changed) {
+		sysmng_update(SYS_UPDATECFG | SYS_UPDATEHDD);	/* np2.cfg を書く */
+	}
+}
+
 static void statefilename(char *path, int size, int slot)
 {
 	char name[32];
@@ -492,21 +708,72 @@ static void stateload(int slot, BOOL force)
 		notify(EV_STATE_LOADED, slot, 2, NULL);
 		return;
 	}
-	info[0] = '\0';
-	ret = statsave_check(path, info, sizeof(info));
-	if (ret & (~STATFLAG_DISKCHG)) {
+	ret = checkdisks(path, info, sizeof(info));
+	if (ret & (~(STATFLAG_DISKCHG | CHECK_CONFLICT))) {
 		__android_log_print(ANDROID_LOG_WARN, LOG_TAG, "state load slot %d: incompatible (%d)", slot, ret);
 		notify(EV_STATE_LOADED, slot, 1, NULL);
 		return;
 	}
-	if ((ret & STATFLAG_DISKCHG) && (!force)) {
+	if ((ret & CHECK_CONFLICT) && (!force)) {
 		/* ディスクがセーブ時と違う: Kotlin 側で確認して force=true で再要求してもらう */
 		notify(EV_STATE_CONFLICT, slot, 0, info);
 		return;
 	}
 	statsave_load(path);
+	syncdisks();
 	__android_log_print(ANDROID_LOG_INFO, LOG_TAG, "state load slot %d: ok", slot);
 	notify(EV_STATE_LOADED, slot, 0, NULL);
+}
+
+static SDL_atomic_t s_resumeanswer;		/* -1 = 未回答 / 0 = ロード / 1 = ロードせず起動 / 2 = 終了 */
+
+/* Kotlin: レジュームの確認の答え (Np2Native.answerResume → nativeAnswerResume) */
+JNIEXPORT void JNICALL Java_jp_sawada_np2android_Np2Native_nativeAnswerResume(JNIEnv *env, jclass cls, jint answer)
+{
+	SDL_AtomicSet(&s_resumeanswer, answer);
+}
+
+BOOL np2bridge_resume(const char *path)
+{
+	char info[1024];
+	int ret;
+	int answer;
+	SDL_Event e;
+
+	if (file_attr(path) == -1) {
+		return FALSE;		/* 初回起動など */
+	}
+	ret = checkdisks(path, info, sizeof(info));
+	if (ret & (~(STATFLAG_DISKCHG | CHECK_CONFLICT))) {
+		__android_log_print(ANDROID_LOG_WARN, LOG_TAG, "resume: incompatible (%d)", ret);
+		notify(EV_RESUME, 0, 1, NULL);
+		return FALSE;
+	}
+	if (ret & CHECK_CONFLICT) {
+		/* Kotlin のダイアログの答えを待つ。Activity が終わるとき (SDL_QUIT) は終了扱い */
+		SDL_AtomicSet(&s_resumeanswer, -1);
+		notify(EV_RESUME, 0, 0, info);
+		while ((answer = SDL_AtomicGet(&s_resumeanswer)) < 0) {
+			SDL_Delay(50);
+			SDL_PumpEvents();
+			if (SDL_PeepEvents(&e, 1, SDL_PEEKEVENT, SDL_QUIT, SDL_QUIT) > 0) {
+				answer = 2;
+				break;
+			}
+		}
+		__android_log_print(ANDROID_LOG_INFO, LOG_TAG, "resume: answer %d", answer);
+		if (answer == 2) {
+			taskmng_userexit = TRUE;	/* メニューの「終了」と同じく、プロセスも終わらせる */
+			return TRUE;
+		}
+		if (answer != 0) {
+			return FALSE;
+		}
+	}
+	statsave_load(path);
+	syncdisks();
+	__android_log_print(ANDROID_LOG_INFO, LOG_TAG, "resume: ok");
+	return FALSE;
 }
 
 void np2bridge_diskerror(const char *path)

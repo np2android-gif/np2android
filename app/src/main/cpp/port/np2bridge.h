@@ -56,6 +56,13 @@ void np2bridge_hddfailed(REG8 drv, const char *path);
  */
 void np2bridge_startupcd(void);
 
+/**
+ * 起動時のレジューム ([path] のステート)。セーブ時とディスクが違えば Kotlin のダイアログで確認し、
+ * 答えが来るまで待つ。ロードしたら np2.cfg の HDD を実際に開いたものに合わせる。
+ * エミュレータスレッドから呼ぶ。終了を選ばれたら TRUE
+ */
+BOOL np2bridge_resume(const char *path);
+
 /** taskmng_exit() (メニューの終了) で止めたとき TRUE */
 extern BOOL taskmng_userexit;
 

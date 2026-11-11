@@ -93,6 +93,8 @@ class Np2Activity : SDLActivity(), KeyboardController.Actions, Np2Menu.Host, Set
             backCallback = cb
         }
         Np2Native.listener = menu.listener
+        // レジュームの確認の答えをエミュレータが待っている (Activity が作り直された) なら出し直す
+        Np2Native.pendingResume?.let { menu.listener.onResumeConflict(it) }
         KeyMapper.custom = CustomKeymap.load(this)
         mLayout?.let { setupOverlay(it) }
         if (BuildConfig.DEBUG) registerDebugKeyReceiver()

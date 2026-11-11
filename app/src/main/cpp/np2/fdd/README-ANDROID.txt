@@ -63,6 +63,20 @@ CD-ROM (sxsicd)
   ゲスト側の例 (MS-DOS 6.2): CONFIG.SYS に DEVICE=NECCDD.SYS /D:CD101 と LASTDRIVE=Z、
   起動後に MSCDEX /D:CD101 /L:Q
 
+ステートのロードとディスク (statsave)
+  ロードはセーブ時のディスクを開き直す (statsave_load の sxsi_alltrash のあと flagload_sxsi)。
+  ロード前の確認 (statflag_checkpath) は、セーブ時のファイルが無いか更新日時が変わったときだけ
+  STATFLAG_DISKCHG を返す。Android では次のように変えている (/* ANDROID-SAF */ の印あり)。
+  - statsave.c/h: statsave_diskcb を足し、statflag_checkpath がディスクを 1 台調べるたびに
+    名前・セーブ時のパス・結果 (変わっていない / 書き換えられた / 見つからない) を渡す
+  - port/np2bridge.c の checkdisks(): それを今開いているディスクと比べ、書き換えられた・見つからない
+    ディスクがあるか、HDD がつながっているものと違えば確認を出す (Kotlin の StateDiskCheck が文にする)。
+    スロットのロードは EV_STATE_CONFLICT、起動時のレジュームは EV_RESUME
+  - sdl2/np2.c の flagload(): レジュームの確認を np2 の menumbox から np2bridge_resume() に替えた。
+    エミュレータスレッドは Kotlin のダイアログの答え (ロード / ロードせず起動 / 終了) を待つ
+  - ロードに成功したら np2bridge.c の syncdisks() で np2.cfg の HDD を実際に開いたファイルに合わせる
+    (メニューの表示と次のリセットがロードした状態と一致する)
+
 ライセンス
   hdd_vhd.h の先頭に「license: same as xnp2 (under the 2-clause BSD)」(lpproj 氏・SimK 氏) とある。
   ほかのファイルには個別の表記がなく、np2kai 全体のライセンス (diskimage/README-ANDROID.txt を参照) が

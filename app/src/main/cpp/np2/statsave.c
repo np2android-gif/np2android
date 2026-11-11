@@ -400,6 +400,10 @@ typedef struct {
 static const OEMCHAR str_updated[] = OEMTEXT("%s: updated");
 static const OEMCHAR str_notfound[] = OEMTEXT("%s: not found");
 
+#if defined(__ANDROID__)	/* ANDROID-SAF: ディスクごとの確認結果を Android 側に渡す (statsave.h) */
+void (*statsave_diskcb)(const OEMCHAR *dvname, const OEMCHAR *path, int state) = NULL;
+#endif
+
 static int statflag_writepath(STFLAGH sfh, const OEMCHAR *path,
 												UINT ftype, int readonly) {
 
@@ -428,8 +432,16 @@ static int statflag_checkpath(STFLAGH sfh, const OEMCHAR *dvname) {
 	OEMCHAR		buf[256];
 	DOSDATE		dosdate;
 	DOSTIME		dostime;
+#if defined(__ANDROID__)	/* ANDROID-SAF */
+	int			state = 0;
+#endif
 
 	ret = statflag_read(sfh, &sp, sizeof(sp));
+#if defined(__ANDROID__)	/* ANDROID-SAF: 読めなかったときに古い中身を渡さない */
+	if (ret != STATFLAG_SUCCESS) {
+		sp.path[0] = '\0';
+	}
+#endif
 	if (sp.path[0]) {
 		fh = file_open_rb(sp.path);
 		if (fh != FILEH_INVALID) {
@@ -440,14 +452,25 @@ static int statflag_checkpath(STFLAGH sfh, const OEMCHAR *dvname) {
 				ret |= STATFLAG_DISKCHG;
 				OEMSPRINTF(buf, str_updated, dvname);
 				statflag_seterr(sfh, buf);
+#if defined(__ANDROID__)	/* ANDROID-SAF */
+				state = 1;
+#endif
 			}
 		}
 		else {
 			ret |= STATFLAG_DISKCHG;
 			OEMSPRINTF(buf, str_notfound, dvname);
 			statflag_seterr(sfh, buf);
+#if defined(__ANDROID__)	/* ANDROID-SAF */
+			state = 2;
+#endif
 		}
 	}
+#if defined(__ANDROID__)	/* ANDROID-SAF */
+	if (statsave_diskcb != NULL) {
+		statsave_diskcb(dvname, sp.path, state);
+	}
+#endif
 	return(ret);
 }
 

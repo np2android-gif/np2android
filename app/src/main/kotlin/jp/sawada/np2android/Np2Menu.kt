@@ -41,6 +41,9 @@ class Np2Menu(private val ctx: Context, private val host: Host) {
 
     private fun builder() = AlertDialog.Builder(ctx, android.R.style.Theme_DeviceDefault_Dialog_Alert)
 
+    /** 表示中のレジュームの確認 (二重に出さない) */
+    private var resumeDialog: AlertDialog? = null
+
     private val fdd1 = DiskTarget(DiskImages.Kind.FDD, 0, "FDD1")
     private val fdd2 = DiskTarget(DiskImages.Kind.FDD, 1, "FDD2")
     private val hdd1 = DiskTarget(DiskImages.Kind.HDD, 0x00, "HDD1", SASI_EXTENSIONS)
@@ -379,12 +382,44 @@ class Np2Menu(private val ctx: Context, private val host: Host) {
         }
 
         override fun onStateConflict(slot: Int, info: String) {
+            val check = StateDiskCheck(info)
+            val b = builder()
+                .setTitle("スロット ${slot + 1} のディスクが今と異なります")
+                .setMessage(check.message("ロード"))
+            if (check.hasUpdated) {
+                // 壊れるおそれがあるときは、キャンセルを目立つ側に置く
+                b.setPositiveButton("キャンセル", null)
+                    .setNegativeButton("それでもロード") { _, _ -> Np2Native.loadState(slot, true) }
+            } else {
+                b.setPositiveButton("ロード") { _, _ -> Np2Native.loadState(slot, true) }
+                    .setNegativeButton("キャンセル", null)
+            }
+            b.show()
+        }
+
+        override fun onResumeConflict(info: String) {
+            if (resumeDialog?.isShowing == true) return
+            val check = StateDiskCheck(info)
+            val answer = { a: Int -> resumeDialog = null; Np2Native.answerResume(a) }
+            val b = builder()
+                .setTitle("前回の続き (レジューム) のディスクが今と異なります")
+                .setMessage(check.message("レジューム"))
+                .setCancelable(false)
+                .setNeutralButton("終了") { _, _ -> answer(Np2Native.RESUME_EXIT) }
+            if (check.hasUpdated) {
+                b.setPositiveButton("レジュームせずに起動") { _, _ -> answer(Np2Native.RESUME_SKIP) }
+                    .setNegativeButton("それでもレジューム") { _, _ -> answer(Np2Native.RESUME_LOAD) }
+            } else {
+                b.setPositiveButton("レジューム") { _, _ -> answer(Np2Native.RESUME_LOAD) }
+                    .setNegativeButton("レジュームせずに起動") { _, _ -> answer(Np2Native.RESUME_SKIP) }
+            }
+            resumeDialog = b.show()
+        }
+
+        override fun onResumeFailed() {
             builder()
-                .setTitle("ディスクがセーブ時と異なります")
-                .setMessage("$info\n\nこのままロードしますか？" +
-                        if (info.contains("not found")) "\n\n" + ctx.getString(R.string.state_disk_not_found_hint) else "")
-                .setPositiveButton("ロード") { _, _ -> Np2Native.loadState(slot, true) }
-                .setNegativeButton("キャンセル", null)
+                .setMessage("前回の続き (レジューム) は今の構成では読み込めないため、最初から起動しました。")
+                .setPositiveButton(R.string.ok, null)
                 .show()
         }
     }

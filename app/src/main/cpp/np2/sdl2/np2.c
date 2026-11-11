@@ -89,6 +89,11 @@ static int flagload(const char *ext, const char *title, BOOL force) {
 	char	buf2[1024 + 256];
 
 	getstatfilename(path, ext, sizeof(path));
+#if defined(__ANDROID__)	/* ANDROID-SAF: 確認は Android のダイアログで行い、ロードしたら np2.cfg の HDD を
+							   実際に開いたものに合わせる (port/np2bridge.c)。Cancel は「終了」 */
+	(void)ret; (void)id; (void)buf; (void)buf2; (void)title; (void)force;
+	return(np2bridge_resume(path) ? DID_CANCEL : DID_YES);
+#endif
 	/* Android: 初回起動など、ファイルが無いだけならエラー表示せずにそのまま起動する */
 	if (file_attr(path) == -1) {
 		return(DID_NO);

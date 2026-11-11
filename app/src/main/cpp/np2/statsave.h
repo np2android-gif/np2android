@@ -47,6 +47,13 @@ int statsave_save(const OEMCHAR *filename);
 int statsave_check(const OEMCHAR *filename, OEMCHAR *buf, int size);
 int statsave_load(const OEMCHAR *filename);
 
+#if defined(__ANDROID__)
+/* ANDROID-SAF: statsave_check() がステートのディスクを 1 台調べるたびに呼ぶ (NULL なら呼ばない)。
+ * dvname = "FDD1"～ / "SASI1"～ / "SCSI0"～、path = セーブ時のパス ("" = 空)、
+ * state = 0: 変わっていない / 1: セーブ後に書き換えられた / 2: 見つからない (port/np2bridge.c) */
+extern void (*statsave_diskcb)(const OEMCHAR *dvname, const OEMCHAR *path, int state);
+#endif
+
 #ifdef __cplusplus
 }
 #endif
