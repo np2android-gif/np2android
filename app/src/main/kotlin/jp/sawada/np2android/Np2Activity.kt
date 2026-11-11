@@ -74,6 +74,8 @@ class Np2Activity : SDLActivity(), KeyboardController.Actions, Np2Menu.Host, Set
         // エミュレータスレッドが動き出す前に登録する (起動直後のレジュームやロードで開けるように)。
         // 見つからなかったものは、この後に出る np2 のレジュームの確認 (英語) より先にダイアログで知らせる
         val lost = DiskImageSource.registerReferenced(this)
+        // 前回の CD-ROM を起動時に入れ直す (レジュームがあれば、そちらに保存された状態が優先される)
+        Np2Native.setStartupCd(DiskImageSource.startupCdPath(this))
         if (lost.isNotEmpty()) {
             dialog()
                 .setTitle(R.string.disk_lost_title)
@@ -263,8 +265,9 @@ class Np2Activity : SDLActivity(), KeyboardController.Actions, Np2Menu.Host, Set
         val intent = Intent(Intent.ACTION_OPEN_DOCUMENT)
             .addCategory(Intent.CATEGORY_OPENABLE)
             .setType("*/*")   // PC-98 のイメージには標準の MIME が無い。拡張子で判定する
-            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION or
-                    Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION or
+                    // CD-ROM は読み取りの権限だけを求める
+                    if (target.kind == DiskImages.Kind.CD) 0 else Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
         @Suppress("DEPRECATION")
         startActivityForResult(intent, REQUEST_OPEN_DIRECT)
     }
@@ -331,11 +334,14 @@ class Np2Activity : SDLActivity(), KeyboardController.Actions, Np2Menu.Host, Set
                 .setPositiveButton(R.string.ok, null)
                 .show()
             is DiskImageSource.Result.NotSeekable -> {
+                // CD-ROM にはコピー方式を用意していないので、開けないことだけを知らせる
+                val isCd = target.kind == DiskImages.Kind.CD
                 val b = dialog()
                     .setTitle(R.string.disk_not_seekable_title)
-                    .setMessage(getString(R.string.disk_not_seekable_message, result.name))
-                    .setNegativeButton(R.string.cancel, null)
-                if (copyUri != null) {
+                    .setMessage(getString(if (isCd) R.string.cd_not_seekable_message
+                                          else R.string.disk_not_seekable_message, result.name))
+                    .setNegativeButton(if (isCd) R.string.ok else R.string.cancel, null)
+                if (copyUri != null && !isCd) {
                     b.setPositiveButton(R.string.disk_copy) { _, _ -> importPicked(target, copyUri) }
                 }
                 b.show()

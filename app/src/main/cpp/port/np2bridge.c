@@ -38,7 +38,8 @@ enum {
 	EV_USER_EXIT		= 4,	/* メニューから終了した (Activity 終了後にプロセスも終わらせてよい) */
 	EV_DISK_ERROR		= 5,	/* text = SAF の仮想パス。書き込みに失敗した */
 	EV_FDD_SET			= 6,	/* a = drive, b = 0:成功 / 1:成功 (書き込み禁止) / 2:失敗, text = パス */
-	EV_HDD_FAILED		= 7		/* a = sxsi drive, text = パス。リセット時に開けなかった */
+	EV_HDD_FAILED		= 7,	/* a = sxsi drive, text = パス。リセット時に開けなかった */
+	EV_CD_SET			= 8		/* b = 0:挿入 / 1:失敗 / 2:ドライブ無し (IDE 無効) / 3:取り出し, text = パス */
 };
 
 static jclass		s_nativeClass;
@@ -153,7 +154,7 @@ static void push(Sint32 code, intptr_t a, intptr_t b)
 	e.user.data2 = (void *)b;
 	if (SDL_PushEvent(&e) <= 0) {
 		/* キュー未初期化 (起動直後) などで積めなかったら所有権のある文字列を解放 */
-		if ((code == NP2CMD_SETFDD) || (code == NP2CMD_SETHDD)) {
+		if ((code == NP2CMD_SETFDD) || (code == NP2CMD_SETHDD) || (code == NP2CMD_SETCD)) {
 			SDL_free((void *)b);
 		}
 	}
@@ -217,6 +218,32 @@ NP2JNI(setFdd)(JNIEnv *env, jclass cls, jint drive, jstring path)
 NP2JNI(setHdd)(JNIEnv *env, jclass cls, jint drive, jstring path)
 {
 	push(NP2CMD_SETHDD, drive, (intptr_t)dupstring(env, path));
+}
+
+/* CD-ROM (IDE セカンダリ・マスター) の挿入・取り出し。HDD と違い、すぐに反映される */
+NP2JNI(setCd)(JNIEnv *env, jclass cls, jstring path)
+{
+	push(NP2CMD_SETCD, 0, (intptr_t)dupstring(env, path));
+}
+
+/*
+ * 起動時に挿入しておく CD-ROM のパス (null なら無し)。エミュレータスレッドが動き出す前
+ * (onCreate) に呼ぶこと。np2bridge_startupcd() が使う。
+ */
+static char s_startupcd[MAX_PATH];
+
+NP2JNI(setStartupCd)(JNIEnv *env, jclass cls, jstring path)
+{
+	const char *utf;
+
+	s_startupcd[0] = '\0';
+	if (path != NULL) {
+		utf = (*env)->GetStringUTFChars(env, path, NULL);
+		if (utf != NULL) {
+			SDL_strlcpy(s_startupcd, utf, sizeof(s_startupcd));
+			(*env)->ReleaseStringUTFChars(env, path, utf);
+		}
+	}
 }
 
 /*
@@ -376,7 +403,8 @@ JNIEXPORT jstring JNICALL Java_jp_sawada_np2android_Np2Native_getHdd(JNIEnv *env
  */
 JNIEXPORT jobjectArray JNICALL Java_jp_sawada_np2android_Np2Native_getDisksInUse(JNIEnv *env, jclass cls)
 {
-	static const REG8 hdds[] = {0x00, 0x01, 0x20, 0x21, 0x22, 0x23};
+	/* 0x02 は CD-ROM (np2.cfg には保存されないので、開いているファイルだけが返る) */
+	static const REG8 hdds[] = {0x00, 0x01, 0x02, 0x20, 0x21, 0x22, 0x23};
 	const char *names[4 + 2 * (sizeof(hdds) / sizeof(hdds[0]))];
 	char buf[MAX_PATH];
 	jclass strcls;
@@ -497,6 +525,47 @@ void np2bridge_hddfailed(REG8 drv, const char *path)
 	notify(EV_HDD_FAILED, drv, 0, path);
 }
 
+/* ---- CD-ROM ---- */
+
+#define CD_DRV	0x02	/* sxsi のドライブ番号 (IDE セカンダリ・マスター。pccore.c) */
+
+/*
+ * CD-ROM を入れ替える。path が NULL か空なら取り出すだけ。
+ * sxsi_devopen() は前のイメージを閉じないので (fd とメモリが漏れる)、必ず先に sxsi_devclose() する。
+ */
+static BOOL cdset(const char *path, BOOL quiet)
+{
+	if (sxsi_getdevtype(CD_DRV) != SXSIDEV_CDROM) {
+		__android_log_print(ANDROID_LOG_WARN, "NP2SAF", "cd: no drive (IDE disabled)");
+		notify(EV_CD_SET, 0, 2, path);
+		return FALSE;
+	}
+	sxsi_devclose(CD_DRV);
+	if ((path == NULL) || (path[0] == '\0')) {
+		__android_log_print(ANDROID_LOG_INFO, "NP2SAF", "cd: ejected");
+		notify(EV_CD_SET, 0, 3, NULL);
+		return TRUE;
+	}
+	if (sxsi_devopen(CD_DRV, path) != SUCCESS) {
+		__android_log_print(ANDROID_LOG_WARN, "NP2SAF", "cd: %s rejected", path);
+		notify(EV_CD_SET, 0, 1, path);
+		return FALSE;
+	}
+	__android_log_print(ANDROID_LOG_INFO, "NP2SAF", "cd: %s inserted", path);
+	if (!quiet) {
+		notify(EV_CD_SET, 0, 0, path);
+	}
+	return TRUE;
+}
+
+void np2bridge_startupcd(void)
+{
+	if (s_startupcd[0] != '\0') {
+		cdset(s_startupcd, TRUE);	/* 失敗だけ知らせる */
+		s_startupcd[0] = '\0';
+	}
+}
+
 void np2bridge_onexit(void)
 {
 	if (taskmng_userexit) {
@@ -550,6 +619,12 @@ BOOL np2bridge_handle(const SDL_Event *e)
 		case NP2CMD_SETHDD:
 			path = (char *)u->data2;
 			diskdrv_setsxsi((REG8)(intptr_t)u->data1, path);
+			SDL_free(path);
+			break;
+
+		case NP2CMD_SETCD:
+			path = (char *)u->data2;
+			cdset(path, FALSE);
 			SDL_free(path);
 			break;
 

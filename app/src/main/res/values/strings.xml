@@ -26,6 +26,10 @@
     <string name="disk_mount_failed">%1$s を %2$s に入れられませんでした。\n対応していない形式か、イメージのサイズや中身が壊れている可能性があります。</string>
     <string name="disk_hdd_failed">%2$s に設定されている %1$s を開けませんでした。%2$s は未接続として起動しています。\n対応していない形式か、イメージが壊れている・見つからない可能性があります。メニューから設定し直してください。</string>
     <string name="disk_hdd_readonly">このイメージは書き込み禁止で開きました。HDD への書き込みはエラーになります。</string>
+    <string name="cd_ejected">CD-ROM を取り出しました</string>
+    <string name="cd_mount_failed">%1$s を CD-ROM として開けませんでした。CD-ROM ドライブは空になっています。\n対応している形式は .iso と、データだけの生イメージ (.bin・.img) です。</string>
+    <string name="cd_no_drive">CD-ROM ドライブがありません。CD-ROM は IDE が有効な構成でだけ使えます。</string>
+    <string name="cd_not_seekable_message">%1$s は、ファイルを直接読めない場所 (クラウドなど) にあります。端末のストレージに置いてから開いてください。</string>
     <string name="disk_write_error">%1$s への書き込みに失敗しました。元の場所が使えなくなっていないか確認してください。</string>
     <string name="state_disk_not_found_hint">見つからないディスクは、ロード後にメニューの「端末のファイルを直接開く」で選び直してください。</string>
 

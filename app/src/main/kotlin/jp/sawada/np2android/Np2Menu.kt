@@ -45,15 +45,20 @@ class Np2Menu(private val ctx: Context, private val host: Host) {
     private val fdd2 = DiskTarget(DiskImages.Kind.FDD, 1, "FDD2")
     private val hdd1 = DiskTarget(DiskImages.Kind.HDD, 0x00, "HDD1", SASI_EXTENSIONS)
     private val hdd2 = DiskTarget(DiskImages.Kind.HDD, 0x01, "HDD2", SASI_EXTENSIONS)
+    private val cd = DiskTarget(DiskImages.Kind.CD, Np2Native.CD_DRIVE, "CD-ROM")
     private val scsi = (0..3).map { DiskTarget(DiskImages.Kind.HDD, 0x20 + it, "SCSI #$it", SCSI_EXTENSIONS) }
 
     fun show() {
+        // 次の起動で入れ直す CD-ROM を、実際に入っているものに合わせる (強制終了の後のレジュームなどで、
+        // 保存してあるパスと食い違うことがある)。メニューを開けるのはエミュレータが動いているときだけ
+        DiskImageSource.saveCdPath(ctx, Np2Native.getHdd(Np2Native.CD_DRIVE))
         val items = listOf<Pair<String, () -> Unit>>(
             "FDD1: ${current(fdd1)}" to { diskMenu(fdd1) },
             "FDD2: ${current(fdd2)}" to { diskMenu(fdd2) },
             "HDD1: ${current(hdd1)}" to { diskMenu(hdd1) },
             "HDD2: ${current(hdd2)}" to { diskMenu(hdd2) },
             "SCSI HDD…" to { scsiMenu() },
+            "CD-ROM: ${current(cd)}" to { diskMenu(cd) },
             ctx.getString(R.string.newdisk_menu) to { newDiskMenu() },
             "ステートセーブ" to { slotMenu(save = true) },
             "ステートロード" to { slotMenu(save = false) },
@@ -181,7 +186,8 @@ class Np2Menu(private val ctx: Context, private val host: Host) {
     private fun diskMenu(t: DiskTarget) {
         val items = mutableListOf<Pair<String, () -> Unit>>()
         items += ctx.getString(R.string.disk_open_direct) to { host.openDirect(t) }
-        items += ctx.getString(R.string.disk_import_copy) to { host.importDisk(t) }
+        // CD-ROM は大きく、書き込みもしないので、コピー方式は用意しない
+        if (t.kind != DiskImages.Kind.CD) items += ctx.getString(R.string.disk_import_copy) to { host.importDisk(t) }
         for (e in DiskImageSource.recent(ctx, t.kind).filter { t.accepts(it.name) }) {
             items += ctx.getString(R.string.disk_direct_suffix, e.name) to { host.insertRecent(t, e) }
         }
@@ -205,7 +211,7 @@ class Np2Menu(private val ctx: Context, private val host: Host) {
      */
     private fun usedByOtherDrive(t: DiskTarget, path: String): String? {
         val drives = (0..3).map { DiskTarget(DiskImages.Kind.FDD, it, "FDD${it + 1}") } +
-                listOf(hdd1, hdd2) + scsi
+                listOf(hdd1, hdd2, cd) + scsi
         for (d in drives) {
             if (d.kind == t.kind && d.drive == t.drive) continue
             val p = if (d.kind == DiskImages.Kind.FDD) Np2Native.getFdd(d.drive) else Np2Native.getHdd(d.drive)
@@ -231,6 +237,9 @@ class Np2Menu(private val ctx: Context, private val host: Host) {
         if (t.kind == DiskImages.Kind.FDD) {
             // 結果 (マウントできたか・書き込み禁止か) は np2 から onFddResult で届くので、そこで表示する
             Np2Native.setFdd(t.drive, path)
+        } else if (t.kind == DiskImages.Kind.CD) {
+            // 結果は onCdResult で届く
+            Np2Native.setCd(path)
         } else {
             Np2Native.setHdd(t.drive, path)
             askReset("${t.label} を ${entry.name} に変更しました。" +
@@ -243,6 +252,8 @@ class Np2Menu(private val ctx: Context, private val host: Host) {
         if (t.kind == DiskImages.Kind.FDD) {
             // 結果は np2 から onFddResult で届く
             Np2Native.setFdd(t.drive, file.absolutePath)
+        } else if (t.kind == DiskImages.Kind.CD) {
+            Np2Native.setCd(file.absolutePath)
         } else {
             Np2Native.setHdd(t.drive, file.absolutePath)
             askReset("${t.label} を ${file.name} に変更しました。")
@@ -253,6 +264,8 @@ class Np2Menu(private val ctx: Context, private val host: Host) {
         if (t.kind == DiskImages.Kind.FDD) {
             Np2Native.setFdd(t.drive, null)
             toast("${t.label} を取り出しました")
+        } else if (t.kind == DiskImages.Kind.CD) {
+            Np2Native.setCd(null)
         } else {
             Np2Native.setHdd(t.drive, null)
             askReset("${t.label} を外しました。")
@@ -302,6 +315,8 @@ class Np2Menu(private val ctx: Context, private val host: Host) {
         }
 
         override fun onStateLoaded(slot: Int, result: Int) {
+            // ステートには CD-ROM のパスも入っている。次の起動で入れ直すパスを合わせる
+            if (result == Np2Native.LOAD_OK) DiskImageSource.saveCdPath(ctx, Np2Native.getHdd(Np2Native.CD_DRIVE))
             toast(when (result) {
                 Np2Native.LOAD_OK -> "スロット ${slot + 1} をロードしました"
                 Np2Native.LOAD_NOT_FOUND -> "スロット ${slot + 1} は空です"
@@ -333,6 +348,30 @@ class Np2Menu(private val ctx: Context, private val host: Host) {
                 .setMessage(ctx.getString(R.string.disk_hdd_failed, File(path).name, label))
                 .setPositiveButton(R.string.ok, null)
                 .show()
+        }
+
+        override fun onCdResult(result: Int, path: String) {
+            val name = File(path).name
+            when (result) {
+                Np2Native.CD_INSERTED -> {
+                    DiskImageSource.saveCdPath(ctx, path)
+                    toast(ctx.getString(R.string.disk_inserted, cd.label, name))
+                }
+                Np2Native.CD_EJECTED -> {
+                    DiskImageSource.saveCdPath(ctx, null)
+                    toast(ctx.getString(R.string.cd_ejected))
+                }
+                else -> {
+                    // 失敗したときは、前の CD-ROM も取り出されている。ドライブが無いときは何も変わっていない
+                    if (result == Np2Native.CD_REJECTED) DiskImageSource.saveCdPath(ctx, null)
+                    builder()
+                        .setTitle(R.string.disk_mount_failed_title)
+                        .setMessage(if (result == Np2Native.CD_NO_DRIVE) ctx.getString(R.string.cd_no_drive)
+                                    else ctx.getString(R.string.cd_mount_failed, name))
+                        .setPositiveButton(R.string.ok, null)
+                        .show()
+                }
+            }
         }
 
         override fun onDiskError(path: String) {

@@ -26,6 +26,11 @@ object DiskImages {
          * (slh・hdn・hds・vhd は np2kai の fdd/sxsihdd.c)
          */
         HDD(setOf("thd", "nhd", "hdi", "hdd", "slh", "hdn", "hds", "vhd")),
+        /**
+         * CD-ROM (xnp2 の fdd/sxsicd.c)。iso (2048 バイト/セクタ) と、データだけの生イメージ
+         * (2352 バイト/セクタ)。形式は拡張子ではなく中身 (ISO9660 の "CD001") で判定される
+         */
+        CD(setOf("iso", "bin", "img")),
     }
 
     /** エミュレータの作業フォルダ (np2.cfg・ROM・ステートセーブの置き場所) */

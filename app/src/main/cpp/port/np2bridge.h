@@ -25,7 +25,8 @@ enum {
 	NP2CMD_STATESAVE,		/* data1 = slot */
 	NP2CMD_STATELOAD,		/* data1 = slot */
 	NP2CMD_EXIT,
-	NP2CMD_REDRAW			/* 描画面が作り直されたので全体を描き直す */
+	NP2CMD_REDRAW,			/* 描画面が作り直されたので全体を描き直す */
+	NP2CMD_SETCD			/* data2 = char* path (NULL で取り出し)。CD-ROM (IDE セカンダリ・マスター) */
 };
 
 /** 一定時間、画面全体を描き直し続ける (port/taskmng.c) */
@@ -48,6 +49,12 @@ void np2bridge_fddresult(REG8 drv, const char *path, BOOL success);
 
 /** リセット時に、設定されているのに開けなかった HDD を Kotlin に通知する (エミュレータスレッドから呼ぶ) */
 void np2bridge_hddfailed(REG8 drv, const char *path);
+
+/**
+ * 起動時 (pccore_reset の後、レジュームの前) に呼ぶ。Kotlin が前回の CD-ROM のパスを
+ * 渡していれば挿入する (CD のパスは np2.cfg に保存されないため)。エミュレータスレッドから呼ぶ
+ */
+void np2bridge_startupcd(void);
 
 /** taskmng_exit() (メニューの終了) で止めたとき TRUE */
 extern BOOL taskmng_userexit;

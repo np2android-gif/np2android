@@ -128,7 +128,8 @@ object DiskImageSource {
         if (!target.accepts(name)) return Result.Unsupported(name)
 
         val cr = context.contentResolver
-        val canWrite = (flags and Intent.FLAG_GRANT_WRITE_URI_PERMISSION) != 0
+        // CD-ROM は読み取りの権限だけを持つ
+        val canWrite = kind != DiskImages.Kind.CD && (flags and Intent.FLAG_GRANT_WRITE_URI_PERMISSION) != 0
         runCatching {
             cr.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or
                     if (canWrite) Intent.FLAG_GRANT_WRITE_URI_PERMISSION else 0)
@@ -206,6 +207,8 @@ object DiskImageSource {
         val dir = DiskImages.dataDir(context)
         val files = listOf("np2.cfg", "np2sdl2.sav") + (0 until Np2Menu.SLOTS).map { "np2sdl2.s%02d".format(it) }
         val ids = mutableSetOf<String>()
+        // 前回の CD-ROM (np2.cfg には保存されないので、アプリの設定に持っている)
+        savedCdPath(context)?.takeIf { it.startsWith("saf:/") }?.let { ids += it.removePrefix("saf:/").substringBefore('/') }
         val prefix = "saf:/".toByteArray()
         for (f in files.map { java.io.File(dir, it) }.filter { it.isFile }) {
             val b = runCatching { f.readBytes() }.getOrNull() ?: continue
@@ -253,7 +256,8 @@ object DiskImageSource {
             null
         } ?: return Result.NotFound(name)
 
-        val rw = try {
+        // CD-ROM は読むだけなので "r" でしか開かない
+        val rw = if (kind == DiskImages.Kind.CD) null else try {
             cr.openFileDescriptor(uri, "rw")
         } catch (e: Exception) {
             if (e is FileNotFoundException || e is SecurityException || e is UnsupportedOperationException ||
@@ -272,7 +276,8 @@ object DiskImageSource {
             return Result.NotSeekable(name)
         }
         val local = isLocalStorage((rw ?: probe).fd, name)
-        if (!local && !allowNonLocal) {
+        // CD-ROM は書き込まないので、端末のストレージに無くても確認なしで開く
+        if (!local && !allowNonLocal && kind != DiskImages.Kind.CD) {
             rw?.close()
             probe.close()
             return Result.NotLocal(name)
@@ -322,6 +327,37 @@ object DiskImageSource {
             }
         }.getOrNull()
         return DiskImages.sanitize(n ?: uri.lastPathSegment?.substringAfterLast('/') ?: "disk")
+    }
+
+    // ---- CD-ROM のパスの保存 ------------------------------------------------
+
+    private const val KEY_CD = "cd_path"
+
+    /** 最後に入っていた CD-ROM のパス (仮想パスか作業フォルダのパス)。無ければ null */
+    fun savedCdPath(context: Context): String? =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(KEY_CD, null)
+
+    fun saveCdPath(context: Context, path: String?) {
+        if (path == savedCdPath(context)) return
+        Log.i(TAG, "cd path saved: $path")
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().apply {
+            if (path.isNullOrEmpty()) remove(KEY_CD) else putString(KEY_CD, path)
+        }.apply()
+    }
+
+    /**
+     * 起動時に入れ直す CD-ROM のパス。[registerReferenced] の後に呼ぶこと。
+     * 履歴から外れた (見つからなくなった) イメージや、消された作業フォルダのファイルなら null を返して忘れる
+     */
+    fun startupCdPath(context: Context): String? {
+        val path = savedCdPath(context) ?: return null
+        val ok = if (path.startsWith("saf:/")) {
+            synchronized(this) { entries(context).any { path.startsWith(it.pathPrefix) } }
+        } else {
+            java.io.File(path).isFile
+        }
+        if (!ok) saveCdPath(context, null)
+        return path.takeIf { ok }
     }
 
     // ---- 履歴の更新 ---------------------------------------------------------

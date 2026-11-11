@@ -23,6 +23,9 @@
 #include	"menubase.h"
 #include	"sysmenu.h"
 #include	"safesave.h"
+#if defined(__ANDROID__)	/* ANDROID-SAF */
+#include	"np2bridge.h"
+#endif
 
 
 		NP2OSCFG	np2oscfg = {0, 0, 0, 0, 0};
@@ -170,6 +173,9 @@ int np2_main(int argc, char *argv[]) {
 
 	scrndraw_redraw();
 	pccore_reset();
+#if defined(__ANDROID__)	/* ANDROID-SAF: 前回の CD-ROM を入れ直す (レジュームがあればそちらが優先) */
+	np2bridge_startupcd();
+#endif
 
 	if (np2oscfg.resume) {
 		id = flagload(str_sav, str_resume, FALSE);

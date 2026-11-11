@@ -31,6 +31,15 @@ object Np2Native {
     @JvmStatic external fun setFdd(drive: Int, path: String?)
     /** drive: 0x00/0x01 = SASI・IDE, 0x20-0x23 = SCSI。変更はリセット後に有効 (設定は np2.cfg に保存される) */
     @JvmStatic external fun setHdd(drive: Int, path: String?)
+    /** CD-ROM (IDE セカンダリ・マスター) の入れ替え。すぐに反映され、結果は [Listener.onCdResult] で通知される */
+    @JvmStatic external fun setCd(path: String?)
+    /**
+     * 起動時に入れておく CD-ROM のパス (CD のパスは np2.cfg に保存されないため)。
+     * エミュレータスレッドが動き出す前 (onCreate) に呼ぶこと。失敗したときだけ [Listener.onCdResult] が来る
+     */
+    @JvmStatic external fun setStartupCd(path: String?)
+    /** sxsi のドライブ番号。[getHdd] に渡すと、入っている CD-ROM のパスが返る */
+    const val CD_DRIVE = 0x02
     /** 現在のディスクのパス (表示用。未挿入なら null) */
     @JvmStatic external fun getFdd(drive: Int): String?
     @JvmStatic external fun getHdd(drive: Int): String?
@@ -95,7 +104,14 @@ object Np2Native {
         fun onFddResult(drive: Int, result: Int, path: String)
         /** リセット時に、設定されている HDD ([drive] は sxsi のドライブ番号) を開けなかった */
         fun onHddFailed(drive: Int, path: String)
+        /** CD-ROM の入れ替え結果。[result] は CD_INSERTED / CD_REJECTED / CD_NO_DRIVE / CD_EJECTED */
+        fun onCdResult(result: Int, path: String)
     }
+
+    const val CD_INSERTED = 0
+    const val CD_REJECTED = 1
+    const val CD_NO_DRIVE = 2
+    const val CD_EJECTED = 3
 
     const val FDD_MOUNTED = 0
     const val FDD_MOUNTED_PROTECTED = 1
@@ -129,6 +145,7 @@ object Np2Native {
                 5 -> l.onDiskError(text ?: "")
                 6 -> l.onFddResult(a, b, text ?: "")
                 7 -> l.onHddFailed(a, text ?: "")
+                8 -> l.onCdResult(b, text ?: "")
             }
         }
     }

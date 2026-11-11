@@ -30,6 +30,17 @@ Android 向けの変更 (np2kai を更新して取り込み直すときに、同
     common/strres.c/h: str_vhd・str_slh・str_hdn・str_hds を追加
     sdl2/dosio.c/h   : file_sync (fflush と fsync) を追加 (可変サイズの VHD が使う)
 
+CD-ROM (sxsicd)
+  CD-ROM は xnp2 のコード (sxsicd.c・cbus/ideio.c・cbus/atapicmd.c) をそのまま使っている。np2kai からは
+  取り込んでいない (np2kai の ideio.c は構造体が大きくなり、ステートセーブの互換性がなくなるため)。
+  ドライブは IDE のセカンダリ・マスター (sxsi のドライブ番号 0x02) で、IDE が有効なら常につながっている。
+  読める形式は iso (2048 バイト/セクタ)、データだけの生イメージ (2352 バイト/セクタ)。
+  コアは変更していない。入れ替えは port/np2bridge.c の cdset() で行う。sxsi_devopen() は前のイメージを
+  閉じないので、必ず sxsi_devclose() してから開く。CD のパスは np2.cfg に保存されないので、アプリの設定に
+  保存し、起動時に sdl2/np2.c から np2bridge_startupcd() で入れ直す (/* ANDROID-SAF */ の印あり)。
+  ゲスト側の例 (MS-DOS 6.2): CONFIG.SYS に DEVICE=NECCDD.SYS /D:CD101 と LASTDRIVE=Z、
+  起動後に MSCDEX /D:CD101 /L:Q
+
 ライセンス
   hdd_vhd.h の先頭に「license: same as xnp2 (under the 2-clause BSD)」(lpproj 氏・SimK 氏) とある。
   ほかのファイルには個別の表記がなく、np2kai 全体のライセンス (diskimage/README-ANDROID.txt を参照) が
