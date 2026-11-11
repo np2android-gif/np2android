@@ -1,14 +1,16 @@
-diskimage/ (FDD イメージの処理)
-================================
+diskimage/ (FDD・CD-ROM イメージの処理)
+=========================================
 
-np2kai (https://github.com/AZO234/NP2kai) の diskimage/ のうち、FDD に関するものを取り込んだ。
+np2kai (https://github.com/AZO234/NP2kai) の diskimage/ のうち、FDD と CD-ROM に関するものを取り込んだ。
 取り込んだ版: wx_alpha ブランチ 5939e0c6d5985c4c08fc70f289a83290e5d3e6f7 (2026-09-05)
 
 取り込んだファイル
   fddfile.c / fddfile.h / img_common.h / img_strres.c / img_strres.h
   fd/ 以下すべて (d88, xdf (ベタ・FDI), dcp/dcu, nfd, vfdd (.fdd), bkdsk (.hdb など))
+  CD-ROM: cddfile.c / cddfile.h、cd/ の cdd_iso・cdd_cue・cdd_ccd・cdd_mds (.c/.h)
+    (使い方と変更点は fdd/README-ANDROID.txt の「CD-ROM (sxsicd)」を参照)
 取り込んでいないもの
-  cd/, cddfile.c/h, win9x/ (CD-ROM イメージは対象外)
+  cd/cdd_nrg (.nrg は先送り)・cdd_real (実ドライブ)・cdd_libcdio、win9x/
 
 xnp2 の fdd/fddfile.c・fdd_d88.c・fdd_xdf.c・d88head.h は削除し、fdd/fddfile.h はこちらを
 読み込むだけのファイルにした。SUPPORT_KAI_IMAGES は port/compiler.h で定義している。

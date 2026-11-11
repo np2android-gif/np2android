@@ -29,9 +29,10 @@ file(GLOB NP2_SOURCES CONFIGURE_DEPENDS
     ${NP2}/embed/menu/*.c
     ${NP2}/embed/menubase/*.c
     ${NP2}/fdd/*.c
-    # FDD イメージは np2kai の diskimage/ (CD-ROM の cd/・cddfile.c は取り込んでいない)
+    # FDD・CD-ROM のイメージは np2kai の diskimage/ (CD-ROM の .nrg・実ドライブ・libcdio は取り込んでいない)
     ${NP2}/diskimage/*.c
     ${NP2}/diskimage/fd/*.c
+    ${NP2}/diskimage/cd/*.c
     ${NP2}/font/*.c
     ${NP2}/generic/*.c
     ${NP2}/io/*.c
@@ -77,6 +78,10 @@ else()
 endif()
 
 add_library(main SHARED ${NP2_SOURCES} ${NP2_CPU_SOURCES})
+
+# np2kai の CD-ROM のコードは、トラック表 (_CDTRK) を np2kai の形で見る (fdd/sxsicd.h)
+file(GLOB NP2_KAICD_SOURCES CONFIGURE_DEPENDS ${NP2}/diskimage/cddfile.c ${NP2}/diskimage/cd/*.c)
+set_source_files_properties(${NP2_KAICD_SOURCES} PROPERTIES COMPILE_DEFINITIONS NP2KAI_CDTRK)
 
 target_include_directories(main PRIVATE
     ${PORT}

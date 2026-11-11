@@ -27,11 +27,11 @@ object DiskImages {
          */
         HDD(setOf("thd", "nhd", "hdi", "hdd", "slh", "hdn", "hds", "vhd")),
         /**
-         * CD-ROM (xnp2 の fdd/sxsicd.c)。iso (2048 バイト/セクタ)、データだけの生イメージ
-         * (2352 バイト/セクタ)、.bin が 1 つの .cue (音楽トラックを含む)。
-         * iso と生イメージは拡張子ではなく中身 (ISO9660 の "CD001") で判定される
+         * CD-ROM (np2kai の diskimage/cddfile.c・cd/ を xnp2 の fdd/sxsicd.c から使う)。
+         * iso・生イメージ (2048・2352・2448 バイト/セクタ。ファイルの大きさで判定)、.bin が 1 つの .cue
+         * (音楽トラックを含む)、.ccd・.cdm (+ 同じ名前の .img)、.mds (+ 同じ名前の .mdf)
          */
-        CD(setOf("iso", "bin", "img", "cue")),
+        CD(setOf("iso", "bin", "img", "cue", "ccd", "cdm", "mds")),
     }
 
     /** エミュレータの作業フォルダ (np2.cfg・ROM・ステートセーブの置き場所) */

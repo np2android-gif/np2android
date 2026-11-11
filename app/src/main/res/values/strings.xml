@@ -27,12 +27,12 @@
     <string name="disk_hdd_failed">%2$s に設定されている %1$s を開けませんでした。%2$s は未接続として起動しています。\n対応していない形式か、イメージが壊れている・見つからない可能性があります。メニューから設定し直してください。</string>
     <string name="disk_hdd_readonly">このイメージは書き込み禁止で開きました。HDD への書き込みはエラーになります。</string>
     <string name="cd_ejected">CD-ROM を取り出しました</string>
-    <string name="cd_mount_failed">%1$s を CD-ROM として開けませんでした。CD-ROM ドライブは空になっています。\n対応している形式は .iso、データだけの生イメージ (.bin・.img)、.bin が 1 つの .cue です。</string>
-    <string name="cd_pick_one">CD-ROM のイメージは 1 つだけ選んでください (.cue と、それが使う .bin は一緒に選べます)。</string>
+    <string name="cd_mount_failed">%1$s を CD-ROM として開けませんでした。CD-ROM ドライブは空になっています。\n対応している形式は .iso、データだけの生イメージ (.bin・.img)、.bin が 1 つの .cue、.ccd・.cdm (+ .img)、.mds (+ .mdf) です。</string>
+    <string name="cd_pick_one">CD-ROM のイメージは 1 つだけ選んでください (.cue・.ccd・.cdm・.mds と、それが使う .bin・.img・.mdf は一緒に選べます)。</string>
     <string name="cd_cue_nofile">%1$s には、使うファイル (FILE の行) が書かれていません。</string>
     <string name="cd_cue_multi">%1$s はトラックごとに複数のファイルに分かれているため、使えません。1 つの .bin にまとめたものを使ってください。</string>
-    <string name="cd_pick_bin_title">.bin ファイルを選んでください</string>
-    <string name="cd_pick_bin_message">%1$s が使う %2$s を選んでください。\n次からは、ファイルを選ぶ画面で .cue と .bin を一緒に選ぶこともできます。</string>
+    <string name="cd_pick_bin_title">イメージの本体を選んでください</string>
+    <string name="cd_pick_bin_message">%1$s が使う %2$s を選んでください。\n次からは、ファイルを選ぶ画面で 2 つを一緒に選ぶこともできます。</string>
     <string name="cd_pick_bin_button">選ぶ</string>
     <string name="cd_no_drive">CD-ROM ドライブがありません。CD-ROM は IDE が有効な構成でだけ使えます。</string>
     <string name="cd_not_seekable_message">%1$s は、ファイルを直接読めない場所 (クラウドなど) にあります。端末のストレージに置いてから開いてください。</string>

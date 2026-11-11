@@ -40,7 +40,7 @@ object DiskImageSource {
         val lastUsed: Long,
         /** 実体が端末のストレージに無いので、ユーザーの選択で読み取り専用として開いている */
         val nonLocal: Boolean = false,
-        /** .cue が使う .bin (CD-ROM のみ)。本体と同じ ID に読み取り専用で付ける */
+        /** .cue・.ccd・.cdm・.mds が使う本体 (.bin・.img・.mdf。CD-ROM のみ)。同じ ID に読み取り専用で付ける */
         val subUri: Uri? = null,
         val subName: String? = null,
     ) {
@@ -316,7 +316,7 @@ object DiskImageSource {
             subUri = subUri, subName = subName), path)
     }
 
-    /** .cue が使う .bin を読み取り専用で開いて [id] に付ける。失敗したらその結果を返す */
+    /** 目次ファイルが使う本体を読み取り専用で開いて [id] に付ける。失敗したらその結果を返す */
     private fun registerSub(context: Context, id: String, uri: Uri, name: String): Result? {
         val pfd = try {
             context.contentResolver.openFileDescriptor(uri, "r")

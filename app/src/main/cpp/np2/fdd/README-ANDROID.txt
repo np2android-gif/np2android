@@ -31,17 +31,35 @@ Android 向けの変更 (np2kai を更新して取り込み直すときに、同
     sdl2/dosio.c/h   : file_sync (fflush と fsync) を追加 (可変サイズの VHD が使う)
 
 CD-ROM (sxsicd)
-  CD-ROM は xnp2 のコード (sxsicd.c・cbus/ideio.c・cbus/atapicmd.c) をそのまま使っている。np2kai からは
-  取り込んでいない (np2kai の ideio.c は構造体が大きくなり、ステートセーブの互換性がなくなるため)。
+  CD-ROM イメージは np2kai の diskimage/ から取り込んだコードで開く (FDD・HDD と同じ版 5939e0c6)。
+  取り込んだファイル: diskimage/cddfile.c・cddfile.h、diskimage/cd/cdd_iso・cdd_cue・cdd_ccd・cdd_mds (.c/.h)
+  取り込んでいないもの: cdd_nrg (.nrg は先送り)、cdd_real (実ドライブ)、cdd_libcdio、np2kai の fdd/sxsicd.c
+  ATAPI・CD-DA (cbus/atapicmd.c・cbus/ideio.c) と sxsi.c/sxsi.h は xnp2 のまま (np2kai の ideio.c は
+  構造体が大きくなり、ステートセーブの互換性がなくなるため)。
+  fdd/sxsicd.c を中継ぎに書き替えた (xnp2 の元のコードは #else 側に残している):
+    拡張子で np2kai の読み取りを選び (.cue・.ccd・.cdm・.mds、それ以外は ISO/生イメージ)、開いたあと
+    np2kai のトラック表を xnp2 の形 (種類・番号・開始位置) に変換して ATAPI・CD-DA に渡す。
+    CD-DA の 1 セクタ読み (sxsicd_readraw) は np2kai と同じ計算で、np2kai では ideio.c にある
+    CUE の PREGAP (イメージに実体の無いセクタ) を除く処理もここで行う。
+  fdd/sxsicd.h: トラック表の型を _CDTRK_NP2 (xnp2 の形) と _CDTRK_KAI (np2kai の形) に分けた。
+    np2kai のファイルは NP2KAI_CDTRK を定義してコンパイルし (CMakeLists.txt)、_CDTRK が np2kai の形になる。
+  読める形式 (拡張子で決める。np2kai と同じ)
+    .iso・生イメージ: 2048・2352・2448 バイト/セクタ (ファイルの大きさで判定。xnp2 と違い "CD001" は見ない)
+    .cue : 最初の FILE ... BINARY だけを使う (WAVE や複数ファイルは np2kai も未対応)。MODE1・MODE2・AUDIO・PREGAP
+    .ccd・.cdm : 同じ名前の .img (2352 バイト/セクタ)。.sub は使わない
+    .mds : 同じ名前の .mdf (AUDIO と MODE1 のトラック。サブチャンネル付きの 2448 バイト/セクタも可)
+  np2kai のファイルへの変更 (/* ANDROID-SAF */ の印あり)
+    cddfile.c: Windows 用の img_dosio.h を読まない。xnp2 の SXSIDEV に無い cdflag_ecc (ECC の状態) を使わない。
+               1 トラックのときは形式が決めたセクタの大きさで数える (2048 から順に試すと、2352・2448 バイト/
+               セクタでセクタ数が 128 の倍数のとき 2048 で割り切れてしまい、セクタ数を誤る)
+    cddfile.h: _CDINFO のトラック表を _CDTRK_KAI と名前で指定し、xnp2 の形の表 (np2trk) を足した
+    cdd_mds.c: xnp2 に無い INT32 を定義。64 ビットの値 (packed 構造体の中) を 1 バイトずつ読む
   ドライブは IDE のセカンダリ・マスター (sxsi のドライブ番号 0x02) で、IDE が有効なら常につながっている。
-  読める形式は iso (2048 バイト/セクタ)、データだけの生イメージ (2352 バイト/セクタ)、
-  .bin が 1 つの .cue (音楽トラックを含む。CD-DA の再生は xnp2 の ideio.c)。
-  sxsicd.c の変更は 1 か所: .cue の INDEX 00 (プリギャップ) をトラックとして数えない
-  (xnp2 は INDEX の行をすべてトラックにするので、プリギャップのある .cue で TOC のトラックが重複する)。
-  .cue が名前で開く .bin は、port/android_safio.c で .cue と同じ ID に付けた付属ファイルとして開く。
-  それ以外のコアは変更していない。入れ替えは port/np2bridge.c の cdset() で行う。sxsi_devopen() は前のイメージを
-  閉じないので、必ず sxsi_devclose() してから開く。CD のパスは np2.cfg に保存されないので、アプリの設定に
-  保存し、起動時に sdl2/np2.c から np2bridge_startupcd() で入れ直す (/* ANDROID-SAF */ の印あり)。
+  目次ファイル (.cue・.ccd・.cdm・.mds) が名前で開く本体 (.bin・.img・.mdf) は、port/android_safio.c で
+  目次ファイルと同じ ID に付けた付属ファイルとして開く。
+  入れ替えは port/np2bridge.c の cdset() で行う。sxsi_devopen() は前のイメージを閉じないので、必ず
+  sxsi_devclose() してから開く。CD のパスは np2.cfg に保存されないので、アプリの設定に保存し、起動時に
+  sdl2/np2.c から np2bridge_startupcd() で入れ直す (/* ANDROID-SAF */ の印あり)。
   ゲスト側の例 (MS-DOS 6.2): CONFIG.SYS に DEVICE=NECCDD.SYS /D:CD101 と LASTDRIVE=Z、
   起動後に MSCDEX /D:CD101 /L:Q
 

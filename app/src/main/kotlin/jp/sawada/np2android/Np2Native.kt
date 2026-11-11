@@ -50,8 +50,8 @@ object Np2Native {
      */
     @JvmStatic external fun safRegister(id: String, name: String, fd: Int, readOnly: Boolean): String?
     /**
-     * [safRegister] で登録した [id] に、.cue が名前で開く .bin を読み取り専用で付ける。
-     * その ID の仮想パスのうち本体 (.cue) 以外の名前を開くと、この fd が開く。
+     * [safRegister] で登録した [id] に、目次ファイル (.cue など) が名前で開く本体 (.bin など) を読み取り専用で付ける。
+     * その ID の仮想パスのうち登録した名前以外を開くと、この fd が開く。
      * [safRegister] で登録し直すと外れるので、そのたびに付け直す。失敗したら false
      */
     @JvmStatic external fun safRegisterSub(id: String, fd: Int): Boolean

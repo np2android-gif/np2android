@@ -184,7 +184,7 @@ class Np2Activity : SDLActivity(), KeyboardController.Actions, Np2Menu.Host, Set
             val target = pendingDirect ?: return
             pendingDirect = null
             if (resultCode != RESULT_OK || data == null) return
-            // CD-ROM は .cue と .bin を一緒に選べる (複数選択)
+            // CD-ROM は目次ファイル (.cue など) と本体 (.bin など) を一緒に選べる (複数選択)
             val clip = data.clipData
             val uris = if (clip != null) (0 until clip.itemCount).map { clip.getItemAt(it).uri }
                        else listOfNotNull(data.data)
@@ -281,7 +281,7 @@ class Np2Activity : SDLActivity(), KeyboardController.Actions, Np2Menu.Host, Set
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION or
                     // CD-ROM は読み取りの権限だけを求める
                     if (target.kind == DiskImages.Kind.CD) 0 else Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
-        // CD-ROM は .cue と .bin を一緒に選べるようにする
+        // CD-ROM は目次ファイル (.cue など) と本体 (.bin など) を一緒に選べるようにする
         if (target.kind == DiskImages.Kind.CD) intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
         @Suppress("DEPRECATION")
         startActivityForResult(intent, REQUEST_OPEN_DIRECT)
@@ -302,26 +302,34 @@ class Np2Activity : SDLActivity(), KeyboardController.Actions, Np2Menu.Host, Set
         }
     }
 
-    /** .bin を選んでもらっている間の .cue */
+    /** 本体 (.bin・.img・.mdf) を選んでもらっている間の目次ファイル (.cue・.ccd・.cdm・.mds) */
     private class PendingCue(val target: Np2Menu.DiskTarget, val cue: Uri, val flags: Int)
     private var pendingCue: PendingCue? = null
 
     /**
-     * CD-ROM のファイル選択の結果。.cue が含まれていれば、.cue に書かれた .bin を選ばれたものの中から探し、
-     * 無ければ .bin を選んでもらう。.cue の読み取りはブロックすることがあるのでワーカースレッドで行う。
+     * CD-ROM のファイル選択の結果。目次ファイル (.cue・.ccd・.cdm・.mds) が含まれていれば、それが使う本体を
+     * 選ばれたものの中から探し、無ければ本体を選んでもらう。本体の名前は、.cue は FILE の行、
+     * ほかは目次ファイルと同じ名前で拡張子が .img (.ccd・.cdm) か .mdf (.mds) (np2kai の決まり)。
+     * .cue の読み取りはブロックすることがあるのでワーカースレッドで行う。
      */
     private fun onCdPicked(target: Np2Menu.DiskTarget, uris: List<Uri>, flags: Int) {
         thread(name = "cue-check") {
             val names = uris.map { DiskImages.displayName(this, it) ?: it.lastPathSegment ?: "disk" }
-            val cueIndex = names.indexOfFirst { it.substringAfterLast('.', "").equals("cue", ignoreCase = true) }
-            val files = if (cueIndex >= 0) CueSheet.files(this, uris[cueIndex]) else null
+            val cueIndex = names.indexOfFirst { CD_BODY.containsKey(it.substringAfterLast('.', "").lowercase()) }
+            val cueName = if (cueIndex >= 0) names[cueIndex] else ""
+            val ext = cueName.substringAfterLast('.', "").lowercase()
+            val files = when {
+                cueIndex < 0 -> null
+                ext == "cue" -> CueSheet.files(this, uris[cueIndex])
+                else -> listOf(cueName.substringBeforeLast('.') + "." + CD_BODY.getValue(ext))
+            }
             runOnUiThread {
                 when {
                     cueIndex < 0 && uris.size == 1 -> onDirectPicked(target, uris[0], flags)
                     cueIndex < 0 -> message(getString(R.string.cd_pick_one))
-                    files == null -> menu.toast(getString(R.string.disk_not_found, names[cueIndex]))
-                    files.isEmpty() -> message(getString(R.string.cd_cue_nofile, names[cueIndex]))
-                    files.size > 1 -> message(getString(R.string.cd_cue_multi, names[cueIndex]))
+                    files == null -> menu.toast(getString(R.string.disk_not_found, cueName))
+                    files.isEmpty() -> message(getString(R.string.cd_cue_nofile, cueName))
+                    files.size > 1 -> message(getString(R.string.cd_cue_multi, cueName))
                     else -> {
                         val want = files[0].substringAfterLast('/').substringAfterLast(BACKSLASH)
                         val others = uris.indices.filter { it != cueIndex }
@@ -330,7 +338,7 @@ class Np2Activity : SDLActivity(), KeyboardController.Actions, Np2Menu.Host, Set
                         if (bin != null) {
                             onDirectPicked(target, uris[cueIndex], flags, subUri = uris[bin])
                         } else {
-                            askBin(PendingCue(target, uris[cueIndex], flags), names[cueIndex], want)
+                            askBin(PendingCue(target, uris[cueIndex], flags), cueName, want)
                         }
                     }
                 }
@@ -338,7 +346,7 @@ class Np2Activity : SDLActivity(), KeyboardController.Actions, Np2Menu.Host, Set
         }
     }
 
-    /** .cue が使う .bin を選んでもらう */
+    /** 目次ファイルが使う本体を選んでもらう */
     private fun askBin(p: PendingCue, cueName: String, binName: String) {
         dialog()
             .setTitle(R.string.cd_pick_bin_title)
@@ -815,6 +823,8 @@ class Np2Activity : SDLActivity(), KeyboardController.Actions, Np2Menu.Host, Set
         private const val REQUEST_KEYMAP = 1002
         private const val REQUEST_OPEN_DIRECT = 1003
         private const val REQUEST_PICK_BIN = 1004
+        /** CD-ROM の目次ファイルの拡張子と、本体の拡張子 (.cue は FILE の行に書かれた名前を使う) */
+        private val CD_BODY = mapOf("cue" to "bin", "ccd" to "img", "cdm" to "img", "mds" to "mdf")
         private const val BACKSLASH = '\\'
         /** keymap ファイルの読み込み上限 (旧版の表は数 KB) */
         private const val MAX_KEYMAP_BYTES = 64 * 1024
