@@ -76,6 +76,8 @@ class Np2Activity : SDLActivity(), KeyboardController.Actions, Np2Menu.Host, Set
         val lost = DiskImageSource.registerReferenced(this)
         // 前回の CD-ROM を起動時に入れ直す (レジュームがあれば、そちらに保存された状態が優先される)
         Np2Native.setStartupCd(DiskImageSource.startupCdPath(this))
+        // ホストドライブの設定 (np2.cfg には保存しない)。np2 が設定を読んだ直後に反映される
+        settings.applyHostDrv()
         if (lost.isNotEmpty()) {
             dialog()
                 .setTitle(R.string.disk_lost_title)

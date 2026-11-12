@@ -49,6 +49,25 @@ class Settings(context: Context) {
         get() = prefs.getInt("orientation", ORIENTATION_AUTO)
         set(v) = prefs.edit().putInt("orientation", v).apply()
 
+    /**
+     * ホストドライブ (作業フォルダの HOSTDRV/ を DOS から使う)。設定の正はここで、np2.cfg には保存しない。
+     * 変えたら [applyHostDrv] でエミュレータに渡す
+     */
+    var hostDrv: Boolean
+        get() = prefs.getBoolean("hostdrv", false)
+        set(v) = prefs.edit().putBoolean("hostdrv", v).apply()
+
+    var hostDrvWrite: Boolean
+        get() = prefs.getBoolean("hostdrv_write", false)
+        set(v) = prefs.edit().putBoolean("hostdrv_write", v).apply()
+
+    /**
+     * ホストドライブの設定をエミュレータに渡す。起動時はエミュレータスレッドが動き出す前 (onCreate) に呼ぶ。
+     * 削除の許可は渡さない: xnp2 の hostdrv は削除・名前の変更・フォルダの作成に対応していない
+     * (NP21/W 版の hostdrv に置き換えたら、削除の許可を設定に戻す)
+     */
+    fun applyHostDrv() = Np2Native.setHostDrv(hostDrv, hostDrvWrite, false)
+
     /** 「ファイル管理」の注意書きを表示済みか */
     var fileManagerNoticeShown: Boolean
         get() = prefs.getBoolean("file_manager_notice_shown", false)
@@ -143,6 +162,35 @@ object SettingsDialog {
             { "${(it * 100).toInt()}%" }) { settings.keyOpacity = it }
         switch("右の余白にキーを表示 (横画面)", settings.showSide) { settings.showSide = it }
         switch("キーを押したときに振動", settings.haptics) { settings.haptics = it }
+
+        // ---- ホストドライブ ----
+        root.addView(TextView(context).apply {
+            setTextAppearance(android.R.style.TextAppearance_DeviceDefault_Medium)
+            text = context.getString(R.string.hostdrv_title)
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            .apply { topMargin = (16 * dp).toInt() })
+        root.addView(TextView(context).apply {
+            setTextAppearance(android.R.style.TextAppearance_DeviceDefault_Small)
+            text = context.getString(R.string.hostdrv_note)
+        })
+        val hdWrite = Switch(context).apply {
+            text = context.getString(R.string.hostdrv_write)
+            isChecked = settings.hostDrvWrite
+            isEnabled = settings.hostDrv
+            gravity = Gravity.CENTER_VERTICAL
+            setOnCheckedChangeListener { _, b -> settings.hostDrvWrite = b; settings.applyHostDrv() }
+        }
+        root.addView(Switch(context).apply {
+            text = context.getString(R.string.hostdrv_enable)
+            isChecked = settings.hostDrv
+            gravity = Gravity.CENTER_VERTICAL
+            setOnCheckedChangeListener { _, b ->
+                settings.hostDrv = b
+                settings.applyHostDrv()
+                hdWrite.isEnabled = b
+            }
+        })
+        root.addView(hdWrite)
 
         // ---- 物理キーの割り当て (旧版の keymap ファイル) ----
         val status = TextView(context)
