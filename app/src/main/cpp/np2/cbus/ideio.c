@@ -175,6 +175,7 @@ static void drvreset(IDEDRV drv) {
 	}
 }
 
+#if !defined(__ANDROID__)	/* ANDROID-SAF: 未知のコマンドでも panic しないので使わない */
 static void panic(const char *str, ...) {
 
 	char	buf[2048];
@@ -187,6 +188,7 @@ static void panic(const char *str, ...) {
 	msgbox("ide_panic", buf);
 	exit(1);
 }
+#endif
 
 
 // ----
@@ -627,8 +629,13 @@ static void IOOUTCALL ideio_o64e(UINT port, REG8 dat) {
 			break;
 
 		default:
+#if defined(__ANDROID__)	/* ANDROID-SAF: 未知のコマンド (PATACD.SYS が送る NOP 00h など) は、
+							   アプリを終了させず ATA の仕様どおりアボートで返す */
 			TRACEOUT(("ideio: unknown command %.2x", dat));
 			cmdabort(drv);
+#else
+			panic("ideio: unknown command %.2x", dat);
+#endif
 			break;
 	}
 	(void)port;

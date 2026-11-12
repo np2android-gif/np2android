@@ -36,6 +36,10 @@ CD-ROM (sxsicd)
   取り込んでいないもの: cdd_nrg (.nrg は先送り)、cdd_real (実ドライブ)、cdd_libcdio、np2kai の fdd/sxsicd.c
   ATAPI・CD-DA (cbus/atapicmd.c・cbus/ideio.c) と sxsi.c/sxsi.h は xnp2 のまま (np2kai の ideio.c は
   構造体が大きくなり、ステートセーブの互換性がなくなるため)。
+  ただし cbus/ideio.c は 1 か所だけ変えた (/* ANDROID-SAF */ の印あり): 知らない IDE コマンドを受けたとき、
+    panic (アプリが終了する) せず、ほかのコマンドと同じ cmdabort() でアボート (ERR・ABRT 04h、割り込みあり) を
+    返す。FreeDOS(98) の PATACD.SYS はドライブを探すときに NOP (00h) を送り、そこでアプリが終了していた。
+    NOP は ATA の仕様でも必ずアボートで返すコマンド。使わなくなった panic() は #if で外している。
   fdd/sxsicd.c を中継ぎに書き替えた (xnp2 の元のコードは #else 側に残している):
     拡張子で np2kai の読み取りを選び (.cue・.ccd・.cdm・.mds、それ以外は ISO/生イメージ)、開いたあと
     np2kai のトラック表を xnp2 の形 (種類・番号・開始位置) に変換して ATAPI・CD-DA に渡す。
@@ -62,6 +66,7 @@ CD-ROM (sxsicd)
   sdl2/np2.c から np2bridge_startupcd() で入れ直す (/* ANDROID-SAF */ の印あり)。
   ゲスト側の例 (MS-DOS 6.2): CONFIG.SYS に DEVICE=NECCDD.SYS /D:CD101 と LASTDRIVE=Z、
   起動後に MSCDEX /D:CD101 /L:Q
+  FreeDOS(98) では PATACD.SYS と SHSUCDX.COM で動くことを確かめている。
 
 ステートのロードとディスク (statsave)
   ロードはセーブ時のディスクを開き直す (statsave_load の sxsi_alltrash のあと flagload_sxsi)。
