@@ -391,6 +391,10 @@ class Np2Menu(private val ctx: Context, private val host: Host) {
             Toast.makeText(ctx, ctx.getString(R.string.disk_write_error, File(path).name), Toast.LENGTH_LONG).show()
         }
 
+        override fun onCpuReset() {
+            Toast.makeText(ctx, R.string.cpu_reset, Toast.LENGTH_LONG).show()
+        }
+
         override fun onStateConflict(slot: Int, info: String) {
             val check = StateDiskCheck(info)
             val b = builder()

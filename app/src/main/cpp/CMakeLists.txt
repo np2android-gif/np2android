@@ -67,7 +67,9 @@ if(NP2_IA32)
         ${NP2}/i386c/ia32/instructions
         ${NP2}/i386c/ia32/instructions/fpu
     )
-    set(NP2_CPU_DEFINES CPUCORE_IA32)
+    # IA32_REBOOT_ON_PANIC: ia32_panic (トリプルフォルトなど) でアプリを終了せずにリセットする
+    # (np2kai と同じ定義。Android 向けの処理は interface.c の ANDROID-CPU)
+    set(NP2_CPU_DEFINES CPUCORE_IA32 IA32_REBOOT_ON_PANIC)
 else()
     file(GLOB NP2_CPU_SOURCES CONFIGURE_DEPENDS
         ${NP2}/debugsub.c

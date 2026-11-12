@@ -36,6 +36,7 @@
     <string name="cd_pick_bin_button">選ぶ</string>
     <string name="cd_no_drive">CD-ROM ドライブがありません。CD-ROM は IDE が有効な構成でだけ使えます。</string>
     <string name="cd_not_seekable_message">%1$s は、ファイルを直接読めない場所 (クラウドなど) にあります。端末のストレージに置いてから開いてください。</string>
+    <string name="cpu_reset">CPU が停止したためリセットしました</string>
     <string name="disk_write_error">%1$s への書き込みに失敗しました。元の場所が使えなくなっていないか確認してください。</string>
 
     <!-- 空のディスクイメージ作成 -->

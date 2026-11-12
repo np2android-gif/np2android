@@ -34,6 +34,16 @@
 #include "iocore.h"
 #include "dmax86.h"
 #include "bios/bios.h"
+#if defined(__ANDROID__)	/* ANDROID-CPU */
+#include "np2bridge.h"
+
+/*
+ * ANDROID-CPU: ia32() / ia32_step() の sigsetjmp の内側を実行しているか。
+ * ia32_panic はこの内側からだけ siglongjmp(exec_1step_jmpbuf) で戻ってよい。
+ * pccore_exec の pic_irq() からの割り込みは外側なので、そこでの panic は今までどおり終了する。
+ */
+static int ia32_in_exec;
+#endif
 
 
 void
@@ -124,12 +134,18 @@ ia32(void)
 
 	case 2:
 		VERBOSE(("ia32: return from panic"));
+#if defined(__ANDROID__)	/* ANDROID-CPU */
+		ia32_in_exec = 0;
+#endif
 		return;
 
 	default:
 		VERBOSE(("ia32: return from unknown cause"));
 		break;
 	}
+#if defined(__ANDROID__)	/* ANDROID-CPU */
+	ia32_in_exec = 1;
+#endif
 
 	if (CPU_TRAP) {
 		do {
@@ -150,6 +166,9 @@ ia32(void)
 			exec_1step();
 		} while (CPU_REMCLOCK > 0);
 	}
+#if defined(__ANDROID__)	/* ANDROID-CPU */
+	ia32_in_exec = 0;
+#endif
 }
 
 void
@@ -168,12 +187,18 @@ ia32_step(void)
 
 	case 2:
 		VERBOSE(("ia32_step: return from panic"));
+#if defined(__ANDROID__)	/* ANDROID-CPU */
+		ia32_in_exec = 0;
+#endif
 		return;
 
 	default:
 		VERBOSE(("ia32_step: return from unknown cause"));
 		break;
 	}
+#if defined(__ANDROID__)	/* ANDROID-CPU */
+	ia32_in_exec = 1;
+#endif
 
 	do {
 		exec_1step();
@@ -185,6 +210,9 @@ ia32_step(void)
 			dmax86();
 		}
 	} while (CPU_REMCLOCK > 0);
+#if defined(__ANDROID__)	/* ANDROID-CPU */
+	ia32_in_exec = 0;
+#endif
 }
 
 void CPUCALL
@@ -223,7 +251,26 @@ ia32_panic(const char *str, ...)
 
 	msgbox("ia32_panic", buf);
 
-#if defined(IA32_REBOOT_ON_PANIC)
+#if defined(IA32_REBOOT_ON_PANIC) && defined(__ANDROID__)	/* ANDROID-CPU */
+	/*
+	 * 実機ではトリプルフォルトで CPU がリセットされる。アプリを終了せずにリセットする。
+	 * ここで pccore_reset() を直接呼ぶと nevent_allreset() でフレームのイベント (NEVENT_FLAMES) も
+	 * 消え、pccore_exec のループが終わらなくなる。既存の 2 つの要求を立てて戻る:
+	 *   CPU_RESETREQ          : pccore_exec の次の周で CPU_SHUT() (CPU だけをリセット)
+	 *   pcstat.hardwarereset  : フレームの終わりで pccore_reset() (メニューのリセットと同じ)
+	 * CPU 実行の外 (pic_irq からの割り込みなど) では戻り先の jmpbuf が無いので、今までどおり終了する。
+	 */
+	if (ia32_in_exec) {
+		VERBOSE(("ia32_panic: reboot"));
+		ia32_in_exec = 0;
+		CPU_RESETREQ = 1;
+		pcstat.hardwarereset = TRUE;
+		np2bridge_cpureset();
+		siglongjmp(exec_1step_jmpbuf, 2);
+	}
+	__ASSERT(0);
+	exit(1);
+#elif defined(IA32_REBOOT_ON_PANIC)
 	VERBOSE(("ia32_panic: reboot"));
 	pccore_reset();
 	siglongjmp(exec_1step_jmpbuf, 2);

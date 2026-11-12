@@ -141,6 +141,8 @@ object Np2Native {
         fun onHddFailed(drive: Int, path: String)
         /** CD-ROM の入れ替え結果。[result] は CD_INSERTED / CD_REJECTED / CD_NO_DRIVE / CD_EJECTED */
         fun onCdResult(result: Int, path: String)
+        /** ゲストの CPU が止まる例外 (トリプルフォルトなど) で、エミュレータがリセットした */
+        fun onCpuReset()
     }
 
     const val CD_INSERTED = 0
@@ -183,6 +185,7 @@ object Np2Native {
                 7 -> l.onHddFailed(a, text ?: "")
                 8 -> l.onCdResult(b, text ?: "")
                 9 -> if (b == 0) l.onResumeConflict(text ?: "") else l.onResumeFailed()
+                10 -> l.onCpuReset()
             }
         }
     }

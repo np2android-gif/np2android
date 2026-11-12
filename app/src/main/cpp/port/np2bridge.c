@@ -44,7 +44,8 @@ enum {
 	EV_FDD_SET			= 6,	/* a = drive, b = 0:成功 / 1:成功 (書き込み禁止) / 2:失敗, text = パス */
 	EV_HDD_FAILED		= 7,	/* a = sxsi drive, text = パス。リセット時に開けなかった */
 	EV_CD_SET			= 8,	/* b = 0:挿入 / 1:失敗 / 2:ドライブ無し (IDE 無効) / 3:取り出し, text = パス */
-	EV_RESUME			= 9		/* b = 0:ディスクが違う (text = 差分。answerResume で答える) / 1:読めない */
+	EV_RESUME			= 9,	/* b = 0:ディスクが違う (text = 差分。answerResume で答える) / 1:読めない */
+	EV_CPU_RESET		= 10	/* ANDROID-CPU: ia32_panic (トリプルフォルトなど) でリセットした */
 };
 
 static jclass		s_nativeClass;
@@ -845,6 +846,12 @@ BOOL np2bridge_resume(const char *path)
 void np2bridge_diskerror(const char *path)
 {
 	notify(EV_DISK_ERROR, 0, 0, path);
+}
+
+void np2bridge_cpureset(void)
+{
+	__android_log_print(ANDROID_LOG_WARN, LOG_TAG, "cpu: stopped by ia32_panic, machine reset");
+	notify(EV_CPU_RESET, 0, 0, NULL);
 }
 
 void np2bridge_fddresult(REG8 drv, const char *path, BOOL success)

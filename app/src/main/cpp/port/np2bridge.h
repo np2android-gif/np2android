@@ -50,6 +50,12 @@ void np2bridge_onexit(void);
 void np2bridge_diskerror(const char *path);
 
 /**
+ * ANDROID-CPU: CPU が止まる例外 (トリプルフォルトなど、ia32_panic) でリセットしたことを Kotlin に
+ * 通知する。レジスタは ia32_panic の msgbox で logcat に出ている。エミュレータスレッドから呼ぶ
+ */
+void np2bridge_cpureset(void);
+
+/**
  * FDD の挿入 (diskdrv_readyfddex) の結果を Kotlin に通知する (エミュレータスレッドから呼ぶ)。
  * 形式やサイズが合わないイメージは np2 がマウントを拒否するので、失敗を表示できるようにする。
  */
