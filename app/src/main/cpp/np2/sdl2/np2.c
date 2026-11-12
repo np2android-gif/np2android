@@ -150,6 +150,9 @@ int np2_main(int argc, char *argv[]) {
 	}
 
 	initload();
+#if defined(__ANDROID__)	/* ANDROID-HOSTDRV: ホストドライブの設定は np2.cfg ではなく Kotlin から受け取る */
+	np2bridge_hostdrv();
+#endif
 
 	TRACEINIT();
 

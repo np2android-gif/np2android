@@ -38,6 +38,12 @@ object Np2Native {
      * エミュレータスレッドが動き出す前 (onCreate) に呼ぶこと。失敗したときだけ [Listener.onCdResult] が来る
      */
     @JvmStatic external fun setStartupCd(path: String?)
+    /**
+     * ホストドライブ (作業フォルダの HOSTDRV/ を DOS から \\HOSTDRV\ で見せる) の設定。
+     * 起動時の値はエミュレータスレッドが動き出す前 (onCreate) に渡し、変更のたびにも呼ぶ。
+     * 無効にするとマウント中でも外れる (ゲストで使い直すには再起動が要る)。write / delete は enabled のときだけ効く
+     */
+    @JvmStatic external fun setHostDrv(enabled: Boolean, write: Boolean, delete: Boolean)
     /** sxsi のドライブ番号。[getHdd] に渡すと、入っている CD-ROM のパスが返る */
     const val CD_DRIVE = 0x02
     /** 現在のディスクのパス (表示用。未挿入なら null) */

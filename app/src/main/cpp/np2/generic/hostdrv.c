@@ -347,7 +347,8 @@ static BRESULT read_data(UINT num, UINT32 pos, UINT size, UINT seg, UINT off) {
 	UINT		r;
 
 	hdf = (HDRVFILE)listarray_getitem(hostdrv.fhdl, num);
-	if (hdf == NULL) {
+	/* ANDROID-HOSTDRV: ステートロードで開き直せなかったファイルは閉じたまま (fseek(NULL) で落ちる) */
+	if ((hdf == NULL) || (hdf->hdl == (INTPTR)FILEH_INVALID)) {
 		return(FAILURE);
 	}
 	fh = (FILEH)hdf->hdl;
@@ -374,7 +375,8 @@ static BRESULT write_data(UINT num, UINT32 pos, UINT size, UINT seg, UINT off) {
 	UINT		r;
 
 	hdf = (HDRVFILE)listarray_getitem(hostdrv.fhdl, num);
-	if (hdf == NULL) {
+	/* ANDROID-HOSTDRV: read_data と同じ */
+	if ((hdf == NULL) || (hdf->hdl == (INTPTR)FILEH_INVALID)) {
 		return(FAILURE);
 	}
 	fh = (FILEH)hdf->hdl;
@@ -519,7 +521,9 @@ static void close_file(INTRST intrst) {
 		start_sector = LOADINTELWORD(sft.start_sector);
 		hdf = (HDRVFILE)listarray_getitem(hostdrv.fhdl, start_sector);
 		if (hdf) {
-			file_close((FILEH)hdf->hdl);
+			if (hdf->hdl != (INTPTR)FILEH_INVALID) {	/* ANDROID-HOSTDRV: fclose(NULL) で落ちる */
+				file_close((FILEH)hdf->hdl);
+			}
 			hdf->hdl = (INTPTR)FILEH_INVALID;
 			hdf->path[0] = '\0';
 		}
@@ -1401,6 +1405,10 @@ int hostdrv_sfload(STFLAGH sfh, const SFENTRY *tbl) {
 			}
 			hdf->hdl = (INTPTR)fh;
 		}
+	}
+	/* ANDROID-HOSTDRV: 検索中のセーブを、検索していない (flist が無い) ときにロードすると失敗していた */
+	if ((sfhdrv.flists) && (hostdrv.flist == NULL)) {
+		hostdrv.flist = listarray_new(sizeof(_HDRVLST), 64);
 	}
 	for (i=0; i<sfhdrv.flists; i++) {
 		hdl = (HDRVLST)listarray_append(hostdrv.flist, NULL);

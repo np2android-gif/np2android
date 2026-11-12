@@ -1403,6 +1403,11 @@ const SFENTRY	*tblterm;
 	mpu98ii_midipanic();
 	pc9861k_midipanic();
 	sxsi_alltrash();
+#if defined(SUPPORT_HOSTDRV)
+	/* ANDROID-HOSTDRV: 開いているファイルを閉じ、マウントを外す (#2)。ステートに hostdrv があれば
+	 * hostdrv_sfload で戻る。無ければ外れたままになる (元は今のファイルが漏れ、今のマウントが残った) */
+	hostdrv_reset();
+#endif
 
 	ret |= flagload_common(&sffh->sfh, np2tbl);
 
@@ -1502,6 +1507,12 @@ const SFENTRY	*tblterm;
 		}
 	}
 	statflag_close(sffh);
+#if defined(SUPPORT_HOSTDRV)
+	/* ANDROID-HOSTDRV: 今ホストドライブが無効なら、ステートのマウント状態を戻さない (#1) */
+	if (np2cfg.hdrvroot[0] == '\0') {
+		hostdrv_reset();
+	}
+#endif
 
 	// I/O作り直し
 	MEMM_ARCH((pccore.model & PCMODEL_EPSON)?1:0);

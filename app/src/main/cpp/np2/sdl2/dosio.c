@@ -370,38 +370,67 @@ void file_listclose(FLISTH hdl) {
 	FindClose(hdl);
 }
 #else
+/*
+ * ANDROID-HOSTDRV: 列挙先のディレクトリを覚えておき、stat はフルパスで行う。
+ * 元はファイル名だけで stat していたため、カレントディレクトリ以外を列挙すると
+ * サイズ・日付が取れなかった (hostdrv の DIR でサイズ 0、日付なしになる)。
+ * FLISTH (long) にはこの構造体へのポインタを入れる (LP64 / ILP32 ともポインタと同じ幅)。
+ */
+typedef struct {
+	DIR		*dir;
+	char	path[MAX_PATH];		/* 列挙先。空でなければ末尾は '/' */
+} _FLISTDIR, *FLISTDIR;
+
 FLISTH file_list1st(const char *dir, FLINFO *fli) {
 
-	DIR		*ret;
+	FLISTDIR	fld;
 
-	ret = opendir(dir);
-	if (ret == NULL) {
-		goto ff1_err;
+	fld = (FLISTDIR)malloc(sizeof(_FLISTDIR));
+	if (fld == NULL) {
+		goto ff1_err1;
 	}
-	if (file_listnext((FLISTH)ret, fli) == SUCCESS) {
-		return((FLISTH)ret);
+	fld->dir = opendir(dir);
+	if (fld->dir == NULL) {
+		goto ff1_err2;
 	}
-	closedir(ret);
+	file_cpyname(fld->path, dir, NELEMENTS(fld->path));
+	file_setseparator(fld->path, NELEMENTS(fld->path));
+	if (file_listnext((FLISTH)(intptr_t)fld, fli) == SUCCESS) {
+		return((FLISTH)(intptr_t)fld);
+	}
+	closedir(fld->dir);
 
-ff1_err:
+ff1_err2:
+	free(fld);
+
+ff1_err1:
 	return(FLISTH_INVALID);
 }
 
 BRESULT file_listnext(FLISTH hdl, FLINFO *fli) {
 
+	FLISTDIR		fld;
 struct dirent	*de;
 struct stat		sb;
+	char			path[MAX_PATH];
 
-	de = readdir((DIR *)hdl);
+	fld = (FLISTDIR)(intptr_t)hdl;
+	de = readdir(fld->dir);
 	if (de == NULL) {
 		return(FAILURE);
 	}
 	if (fli) {
 		memset(fli, 0, sizeof(*fli));
 		fli->caps = FLICAPS_ATTR;
-		fli->attr = (de->d_type & DT_DIR) ? FILEATTR_DIRECTORY : 0;
+		fli->attr = 0;
 
-		if (stat(de->d_name, &sb) == 0) {
+		file_cpyname(path, fld->path, NELEMENTS(path));
+		file_catname(path, de->d_name, NELEMENTS(path));
+		if (stat(path, &sb) == 0) {
+			/* d_type は DT_UNKNOWN を返す FS があり、DT_DIR のビット判定は DT_SOCK でも真になるので st_mode で見る */
+			if (S_ISDIR(sb.st_mode)) {
+				fli->attr |= FILEATTR_DIRECTORY;
+			}
 			fli->caps |= FLICAPS_SIZE;
 			fli->size = (UINT)sb.st_size;
 			if (!(sb.st_mode & S_IWUSR)) {
@@ -411,6 +440,9 @@ struct stat		sb;
 				fli->caps |= FLICAPS_DATE | FLICAPS_TIME;
 			}
 		}
+		else if (de->d_type == DT_DIR) {
+			fli->attr |= FILEATTR_DIRECTORY;
+		}
 		milstr_ncpy(fli->path, de->d_name, sizeof(fli->path));
 	}
 	return(SUCCESS);
@@ -418,7 +450,11 @@ struct stat		sb;
 
 void file_listclose(FLISTH hdl) {
 
-	closedir((DIR *)hdl);
+	FLISTDIR	fld;
+
+	fld = (FLISTDIR)(intptr_t)hdl;
+	closedir(fld->dir);
+	free(fld);
 }
 #endif
 

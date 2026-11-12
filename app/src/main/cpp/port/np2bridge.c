@@ -24,6 +24,9 @@
 #include "fdd/fddfile.h"
 #include "fdd/sxsi.h"
 #include "fdd/newdisk.h"
+#include "hostdrv.h"
+#include <errno.h>
+#include <sys/stat.h>
 
 #define LOG_TAG "np2"
 
@@ -246,6 +249,69 @@ NP2JNI(setStartupCd)(JNIEnv *env, jclass cls, jstring path)
 			(*env)->ReleaseStringUTFChars(env, path, utf);
 		}
 	}
+}
+
+/*
+ * ANDROID-HOSTDRV: ホストドライブの設定。設定の正は Kotlin の Settings で、np2.cfg には保存しない。
+ * 起動時の値はエミュレータスレッドが動き出す前 (onCreate) に渡しておき、np2bridge_hostdrv() が
+ * initload の後に読む。動作中の変更はイベントを積み、エミュレータスレッドで反映する。
+ */
+enum {
+	HOSTDRV_ENABLE	= 0x01,
+	HOSTDRV_WRITE	= 0x02,
+	HOSTDRV_DELETE	= 0x04
+};
+static SDL_atomic_t s_hostdrv;
+
+NP2JNI(setHostDrv)(JNIEnv *env, jclass cls, jboolean enabled, jboolean write, jboolean del)
+{
+	int v;
+
+	v = 0;
+	if (enabled) {
+		v |= HOSTDRV_ENABLE;
+		if (write) {
+			v |= HOSTDRV_WRITE;
+		}
+		if (del) {
+			v |= HOSTDRV_DELETE;
+		}
+	}
+	SDL_AtomicSet(&s_hostdrv, v);
+	push(NP2CMD_SETHOSTDRV, 0, 0);		/* 起動前で積めなくても、起動時に np2bridge_hostdrv() が読む */
+}
+
+void np2bridge_hostdrv(void)
+{
+	int		v;
+	char	root[MAX_PATH];
+
+	v = SDL_AtomicGet(&s_hostdrv);
+	root[0] = '\0';
+	if (v & HOSTDRV_ENABLE) {
+		file_cpyname(root, file_getcd("HOSTDRV/"), NELEMENTS(root));
+		if ((mkdir(root, 0777) != 0) && (errno != EEXIST)) {
+			__android_log_print(ANDROID_LOG_ERROR, "NP2HDRV", "cannot create %s: %s", root, strerror(errno));
+			root[0] = '\0';
+		}
+	}
+	if ((root[0] == '\0') && (hostdrv.stat.is_mount)) {
+		/* 開いているファイルを閉じて外す。HOSTDRV.COM は常駐したままなので、
+		 * ゲストからの要求は次の処理に回されてエラーになる。使えるのはゲストを再起動して常駐し直してから */
+		__android_log_print(ANDROID_LOG_INFO, "NP2HDRV", "unmount");
+		hostdrv_reset();
+	}
+	file_cpyname(np2cfg.hdrvroot, root, NELEMENTS(np2cfg.hdrvroot));
+	np2cfg.hdrvacc = HDFMODE_READ;
+	if (root[0] != '\0') {
+		if (v & HOSTDRV_WRITE) {
+			np2cfg.hdrvacc |= HDFMODE_WRITE;
+		}
+		if (v & HOSTDRV_DELETE) {
+			np2cfg.hdrvacc |= HDFMODE_DELETE;
+		}
+	}
+	__android_log_print(ANDROID_LOG_INFO, "NP2HDRV", "root=\"%s\" acc=%d", np2cfg.hdrvroot, np2cfg.hdrvacc);
 }
 
 /*
@@ -937,6 +1003,10 @@ BOOL np2bridge_handle(const SDL_Event *e)
 
 		case NP2CMD_REDRAW:
 			taskmng_requestredraw();
+			break;
+
+		case NP2CMD_SETHOSTDRV:
+			np2bridge_hostdrv();
 			break;
 
 		default:
