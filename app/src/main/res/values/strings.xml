@@ -59,5 +59,5 @@
     <string name="hostdrv_title">ホストドライブ</string>
     <string name="hostdrv_enable">ホストドライブを使う</string>
     <string name="hostdrv_write">書き込みを許可</string>
-    <string name="hostdrv_note">作業フォルダの HOSTDRV フォルダを DOS から読み書きできるようにします。DOS で np2tool.d88 の HOSTDRV.COM を常駐させると (例: hostdrv g)、指定したドライブに見えます。中身はファイルアプリの「Neko Project II for Android」→ HOSTDRV から出し入れできます。DOS からはファイルの削除・名前の変更・フォルダの作成はできません。\nオン・オフを切り替えたら、ゲストをリセットしてください。</string>
+    <string name="hostdrv_note">作業フォルダの HOSTDRV フォルダを DOS から読み書きできるようにします。DOS で np2tool.d88 の HOSTDRV.COM を常駐させると (例: hostdrv g)、指定したドライブに見えます。中身はファイルアプリの「Neko Project II for Android」→ HOSTDRV から出し入れできます。DOS からはファイルの削除・名前の変更、フォルダの作成・削除はできません。\nオン・オフを切り替えたら、ゲストをリセットしてください。</string>
 </resources>
