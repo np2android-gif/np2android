@@ -106,6 +106,10 @@ LASTDRIVE=Z
 MSCDEX /D:CD101 /L:Q
 ```
 
+### ゲスト側の設定例（FreeDOS(98)）
+
+FreeDOS(98) では、PATACD.SYS と SHSUCDX.COM の組み合わせで動くことを確かめています。
+
 ## ホストドライブ
 
 アプリの作業フォルダにある `HOSTDRV` フォルダを、DOS からドライブとして読み書きできます。ディスクイメージを作らずに、Android と PC-98 の間でファイルを受け渡せます。

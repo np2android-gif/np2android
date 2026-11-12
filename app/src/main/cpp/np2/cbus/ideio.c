@@ -627,7 +627,8 @@ static void IOOUTCALL ideio_o64e(UINT port, REG8 dat) {
 			break;
 
 		default:
-			panic("ideio: unknown command %.2x", dat);
+			TRACEOUT(("ideio: unknown command %.2x", dat));
+			cmdabort(drv);
 			break;
 	}
 	(void)port;
