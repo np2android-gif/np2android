@@ -221,7 +221,8 @@ object DiskImageSource {
      */
     private fun referencedIds(context: Context): Set<String> {
         val dir = DiskImages.dataDir(context)
-        val files = listOf("np2.cfg", "np2sdl2.sav") + (0 until Np2Menu.SLOTS).map { "np2sdl2.s%02d".format(it) }
+        // クイックセーブ (s00) とスロット 1〜4 (s01〜s04)
+        val files = listOf("np2.cfg", "np2sdl2.sav") + (Np2Menu.QUICK_SLOT..Np2Menu.SLOTS).map { "np2sdl2.s%02d".format(it) }
         val ids = mutableSetOf<String>()
         // 前回の CD-ROM (np2.cfg には保存されないので、アプリの設定に持っている)
         savedCdPath(context)?.takeIf { it.startsWith("saf:/") }?.let { ids += it.removePrefix("saf:/").substringBefore('/') }

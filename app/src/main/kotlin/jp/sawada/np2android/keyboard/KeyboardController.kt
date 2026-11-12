@@ -2,6 +2,7 @@ package jp.sawada.np2android.keyboard
 
 import android.os.Handler
 import android.os.Looper
+import jp.sawada.np2android.Np2Menu
 import jp.sawada.np2android.Np2Native
 
 /**
@@ -79,9 +80,9 @@ class KeyboardController(private val actions: Actions) {
             code == SoftKeyCodes.MOUSE_RIGHT -> Np2Native.mouseButton(Np2Native.MOUSE_RIGHT, false)
             // 以下は離したときに実行 (押した指をずらしてキャンセルする余地を残す)
             code == SoftKeyCodes.MENU -> actions.openMenu()
-            code == SoftKeyCodes.STATE_SAVE -> Np2Native.saveState(0)
+            code == SoftKeyCodes.STATE_SAVE -> Np2Native.saveState(Np2Menu.QUICK_SLOT)
             // ディスクがセーブ時と違うときは Np2Menu のリスナーが確認ダイアログを出す
-            code == SoftKeyCodes.STATE_LOAD -> Np2Native.loadState(0, false)
+            code == SoftKeyCodes.STATE_LOAD -> Np2Native.loadState(Np2Menu.QUICK_SLOT, false)
             code == SoftKeyCodes.TOGGLE_KEYBOARD -> actions.toggleKeyboard()
             code == SoftKeyCodes.TOGGLE_SIDE -> actions.toggleSide()
         }

@@ -286,23 +286,27 @@ class Np2Menu(private val ctx: Context, private val host: Host) {
 
     // ---- ステート ----
 
+    /** [slot] は np2sdl2.sNN の番号。0 = クイックセーブ、1〜[SLOTS] = メニューのスロット 1〜 */
     private fun slotFile(slot: Int) = File(DiskImages.dataDir(ctx), "np2sdl2.s%02d".format(slot))
 
     private fun slotMenu(save: Boolean) {
         val fmt = SimpleDateFormat("yyyy/MM/dd HH:mm", Locale.JAPAN)
-        val labels = (0 until SLOTS).map { s ->
+        // セーブはスロット 1〜4 だけ。ロードにはクイックセーブ (SAVE ボタン) も並べる
+        val slots = (if (save) 1..SLOTS else 0..SLOTS).toList()
+        val labels = slots.map { s ->
             val f = slotFile(s)
-            "スロット ${s + 1}  " + if (f.exists()) fmt.format(Date(f.lastModified())) else "(空)"
+            "${slotName(s)}  " + if (f.exists()) fmt.format(Date(f.lastModified())) else "(空)"
         }
         builder()
             .setTitle(if (save) "ステートセーブ" else "ステートロード")
-            .setItems(labels.toTypedArray()) { _, s ->
+            .setItems(labels.toTypedArray()) { _, i ->
+                val s = slots[i]
                 when {
                     save && slotFile(s).exists() ->
-                        confirm("スロット ${s + 1} に上書きしますか？") { Np2Native.saveState(s) }
+                        confirm("${slotName(s)} に上書きしますか？") { Np2Native.saveState(s) }
                     save -> Np2Native.saveState(s)
-                    !slotFile(s).exists() -> toast("スロット ${s + 1} は空です")
-                    else -> confirm("スロット ${s + 1} をロードしますか？\n現在の状態は失われます。") {
+                    !slotFile(s).exists() -> toast("${slotName(s)} は空です")
+                    else -> confirm("${slotName(s)} をロードしますか？\n現在の状態は失われます。") {
                         Np2Native.loadState(s, false)
                     }
                 }
@@ -311,18 +315,24 @@ class Np2Menu(private val ctx: Context, private val host: Host) {
             .show()
     }
 
+    private fun slotName(slot: Int) = if (slot == QUICK_SLOT) "クイックセーブ" else "スロット $slot"
+
     /** ネイティブからの結果通知 (UI スレッド) */
     val listener = object : Np2Native.Listener {
         override fun onStateSaved(slot: Int, success: Boolean) {
-            toast(if (success) "スロット ${slot + 1} にセーブしました" else "セーブに失敗しました")
+            toast(when {
+                !success -> "セーブに失敗しました"
+                slot == QUICK_SLOT -> "クイックセーブしました"
+                else -> "スロット $slot にセーブしました"
+            })
         }
 
         override fun onStateLoaded(slot: Int, result: Int) {
             // ステートには CD-ROM のパスも入っている。次の起動で入れ直すパスを合わせる
             if (result == Np2Native.LOAD_OK) DiskImageSource.saveCdPath(ctx, Np2Native.getHdd(Np2Native.CD_DRIVE))
             toast(when (result) {
-                Np2Native.LOAD_OK -> "スロット ${slot + 1} をロードしました"
-                Np2Native.LOAD_NOT_FOUND -> "スロット ${slot + 1} は空です"
+                Np2Native.LOAD_OK -> if (slot == QUICK_SLOT) "クイックセーブをロードしました" else "スロット $slot をロードしました"
+                Np2Native.LOAD_NOT_FOUND -> if (slot == QUICK_SLOT) "クイックセーブはまだありません" else "スロット $slot は空です"
                 else -> "このステートは現在の構成では読み込めません"
             })
         }
@@ -384,7 +394,7 @@ class Np2Menu(private val ctx: Context, private val host: Host) {
         override fun onStateConflict(slot: Int, info: String) {
             val check = StateDiskCheck(info)
             val b = builder()
-                .setTitle("スロット ${slot + 1} のディスクが今と異なります")
+                .setTitle("${slotName(slot)} のディスクが今と異なります")
                 .setMessage(check.message("ロード"))
             if (check.hasUpdated) {
                 // 壊れるおそれがあるときは、キャンセルを目立つ側に置く
@@ -437,7 +447,10 @@ class Np2Menu(private val ctx: Context, private val host: Host) {
     fun toast(message: String) = Toast.makeText(ctx, message, Toast.LENGTH_SHORT).show()
 
     companion object {
+        /** メニューのスロット数 (np2sdl2.s01〜s04) */
         const val SLOTS = 4
+        /** ソフトキーの SAVE・LOAD が使うクイックセーブ (np2sdl2.s00)。メニューのスロットとは別 */
+        const val QUICK_SLOT = 0
         val SASI_EXTENSIONS = setOf("thd", "nhd", "hdi", "slh", "vhd")
         val SCSI_EXTENSIONS = setOf("hdd", "nhd", "hdi", "hdn", "hds", "vhd")
     }

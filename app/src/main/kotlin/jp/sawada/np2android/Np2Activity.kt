@@ -698,8 +698,8 @@ class Np2Activity : SDLActivity(), KeyboardController.Actions, Np2Menu.Host, Set
                 val button = if (action == KeyMapper.ACTION_MOUSE_LEFT) Np2Native.MOUSE_LEFT else Np2Native.MOUSE_RIGHT
                 if (first) Np2Native.mouseButton(button, true) else if (up) Np2Native.mouseButton(button, false)
             }
-            KeyMapper.ACTION_STATE_SAVE -> if (up) Np2Native.saveState(0)
-            KeyMapper.ACTION_STATE_LOAD -> if (up) Np2Native.loadState(0, false)
+            KeyMapper.ACTION_STATE_SAVE -> if (up) Np2Native.saveState(Np2Menu.QUICK_SLOT)
+            KeyMapper.ACTION_STATE_LOAD -> if (up) Np2Native.loadState(Np2Menu.QUICK_SLOT, false)
             KeyMapper.ACTION_VOLUME_DOWN, KeyMapper.ACTION_VOLUME_UP -> if (down) {
                 val dir = if (action == KeyMapper.ACTION_VOLUME_UP) AudioManager.ADJUST_RAISE else AudioManager.ADJUST_LOWER
                 (getSystemService(AUDIO_SERVICE) as AudioManager)
