@@ -479,6 +479,22 @@ void keystat_allrelease(void) {
 }
 
 
+#if defined(__ANDROID__)	/* ANDROID-KBD: ソフトキーボードの CAPS・カナの表示をエミュレータの状態に合わせるため */
+REG8 keystat_getlock(void) {
+
+	REG8	ret;
+
+	ret = 0;
+	if (keystat.ref[0x71] != NKEYREF_NC) {
+		ret |= 1;
+	}
+	if (keystat.ref[0x72] != NKEYREF_NC) {
+		ret |= 2;
+	}
+	return(ret);
+}
+#endif
+
 REG8 keystat_getjoy(void) {
 
 	return(~keystat.extkey);

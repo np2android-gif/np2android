@@ -16,6 +16,8 @@ object Np2Native {
     @JvmStatic external fun keyDown(code: Int)
     @JvmStatic external fun keyUp(code: Int)
     @JvmStatic external fun releaseAllKeys()
+    /** CAPS (bit0)・カナ (bit1) がロックされているか (エミュレータ側の状態) */
+    @JvmStatic external fun getLockState(): Int
 
     // ---- マウス ----
     const val MOUSE_LEFT = 0

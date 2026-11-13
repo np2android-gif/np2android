@@ -49,12 +49,9 @@ class KeyboardController(private val actions: Actions) {
 
         val pc98 = SoftKeyCodes.toPc98(code)
         when {
+            isLockKey(pc98) -> toggleLock(pc98)
             pc98 >= 0 -> {
                 Np2Native.keyDown(pc98)
-                if (pc98 == PC98_CAPS || pc98 == PC98_KANA) {
-                    if (!locked.remove(pc98)) locked.add(pc98)
-                    actions.onLockStateChanged()
-                }
                 if (pc98 < 0x70) startRepeat(pc98)
             }
             code == SoftKeyCodes.MOUSE_LEFT -> Np2Native.mouseButton(Np2Native.MOUSE_LEFT, true)
@@ -72,6 +69,7 @@ class KeyboardController(private val actions: Actions) {
 
         val pc98 = SoftKeyCodes.toPc98(code)
         when {
+            isLockKey(pc98) -> {}  // ロック式キーは離しても何も送らない (次に押したときに解除)
             pc98 >= 0 -> {
                 if (pc98 == repeatPc98) stopRepeat()
                 Np2Native.keyUp(pc98)
@@ -94,12 +92,40 @@ class KeyboardController(private val actions: Actions) {
         for (code in pressCount.keys.toList()) {
             val pc98 = SoftKeyCodes.toPc98(code)
             when {
+                isLockKey(pc98) -> {}  // ロックは指を離しても保つ
                 pc98 >= 0 -> Np2Native.keyUp(pc98)
                 code == SoftKeyCodes.MOUSE_LEFT -> Np2Native.mouseButton(Np2Native.MOUSE_LEFT, false)
                 code == SoftKeyCodes.MOUSE_RIGHT -> Np2Native.mouseButton(Np2Native.MOUSE_RIGHT, false)
             }
         }
         pressCount.clear()
+    }
+
+    /**
+     * CAPS / カナのロックを切り替える。実機のこの 2 つはメカニカルロック式で、ロック中はキーが
+     * 押し下げられたままになる。そのためロックしたら押下だけ、解除したら解放だけを送る
+     * (押下と解放を続けて送ると、ロックがすぐに外れて効かない)。物理キーボードからも呼ぶ。
+     */
+    fun toggleLock(pc98: Int) {
+        if (locked.remove(pc98)) {
+            Np2Native.keyUp(pc98)
+        } else {
+            locked.add(pc98)
+            Np2Native.keyDown(pc98)
+        }
+        actions.onLockStateChanged()
+    }
+
+    /**
+     * CAPS / カナの表示をエミュレータの状態に合わせる。ステートのロード (起動時のレジュームを含む) で
+     * エミュレータ側のロック状態が変わるので、そのあとに呼ぶ。
+     */
+    fun syncLocks() {
+        val state = Np2Native.getLockState()
+        locked.clear()
+        if (state and 1 != 0) locked.add(PC98_CAPS)
+        if (state and 2 != 0) locked.add(PC98_KANA)
+        actions.onLockStateChanged()
     }
 
     private fun startRepeat(pc98: Int) {
@@ -116,6 +142,8 @@ class KeyboardController(private val actions: Actions) {
     companion object {
         const val PC98_CAPS = 0x71
         const val PC98_KANA = 0x72
+
+        fun isLockKey(pc98: Int) = pc98 == PC98_CAPS || pc98 == PC98_KANA
         private const val REPEAT_DELAY_MS = 500L
         private const val REPEAT_INTERVAL_MS = 60L
     }

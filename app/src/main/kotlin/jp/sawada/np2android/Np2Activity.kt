@@ -465,6 +465,10 @@ class Np2Activity : SDLActivity(), KeyboardController.Actions, Np2Menu.Host, Set
      * Android 11 以降はファイル画面がランチャーに出ていない端末があるので、メニューから開けるようにする。
      * 開き方は端末・バージョンで受け付けるものが違うため、順に試す。
      */
+    override fun onStateRestored() {
+        if (::controller.isInitialized) controller.syncLocks()
+    }
+
     override fun openFileManager() {
         // ファイル画面は各ファイルの説明欄を表示しないので、注意点は初回だけここで案内する
         if (!settings.fileManagerNoticeShown) {
@@ -515,6 +519,8 @@ class Np2Activity : SDLActivity(), KeyboardController.Actions, Np2Menu.Host, Set
 
     private fun setupOverlay(root: ViewGroup) {
         controller = KeyboardController(this)
+        // 起動時のレジュームで CAPS・カナがロックされていることがあるので、少し待ってから表示を合わせる
+        root.postDelayed({ controller.syncLocks() }, LOCK_SYNC_DELAY_MS)
         val ov = FrameLayout(this)
         root.addView(ov, RelativeLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
@@ -706,6 +712,11 @@ class Np2Activity : SDLActivity(), KeyboardController.Actions, Np2Menu.Host, Set
                     .adjustStreamVolume(AudioManager.STREAM_MUSIC, dir, AudioManager.FLAG_SHOW_UI)
             }
             else -> {
+                // CAPS・カナはロック式。押すたびにソフトキーと同じロック状態を切り替え、離したときは何もしない
+                if (KeyboardController.isLockKey(action)) {
+                    if (first && ::controller.isInitialized) controller.toggleLock(action)
+                    return true
+                }
                 // PC-98 キー。0x70 未満は Android のキーリピートをそのまま PC-98 のリピートとして送る
                 if (down && (event.repeatCount == 0 || action < 0x70)) Np2Native.keyDown(action)
                 else if (up) Np2Native.keyUp(action)
@@ -823,6 +834,8 @@ class Np2Activity : SDLActivity(), KeyboardController.Actions, Np2Menu.Host, Set
 
     companion object {
         private const val TAG = "np2ui"
+        /** 起動後、レジュームの読み込みが終わってから CAPS・カナの表示を合わせるまでの待ち時間 */
+        private const val LOCK_SYNC_DELAY_MS = 3000L
         private const val REQUEST_IMPORT = 1001
         private const val REQUEST_KEYMAP = 1002
         private const val REQUEST_OPEN_DIRECT = 1003

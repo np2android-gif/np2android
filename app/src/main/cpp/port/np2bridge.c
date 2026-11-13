@@ -195,6 +195,12 @@ NP2JNI(keyUp)(JNIEnv *env, jclass cls, jint code)
 	push(NP2CMD_KEYUP, code & 0x7f, 0);
 }
 
+/* ANDROID-KBD: CAPS (bit0)・カナ (bit1) がロックされているか。ソフトキーの表示を合わせるのに使う */
+JNIEXPORT jint JNICALL Java_jp_sawada_np2android_Np2Native_getLockState(JNIEnv *env, jclass cls)
+{
+	return (jint)keystat_getlock();
+}
+
 NP2JNI(releaseAllKeys)(JNIEnv *env, jclass cls)
 {
 	push(NP2CMD_KEYALLRELEASE, 0, 0);

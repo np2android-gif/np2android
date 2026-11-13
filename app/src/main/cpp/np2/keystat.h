@@ -196,6 +196,9 @@ void keystat_down(const UINT8 *key, REG8 keys, REG8 ref);
 void keystat_up(const UINT8 *key, REG8 keys, REG8 ref);
 void keystat_resendstat(void);
 REG8 keystat_getjoy(void);
+#if defined(__ANDROID__)
+REG8 keystat_getlock(void);	/* ANDROID-KBD */
+#endif
 REG8 keystat_getmouse(SINT16 *x, SINT16 *y);
 
 

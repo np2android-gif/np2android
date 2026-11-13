@@ -24,6 +24,8 @@ class Np2Menu(private val ctx: Context, private val host: Host) {
         fun openSettings()
         /** 作業フォルダをシステムのファイル画面で開く */
         fun openFileManager()
+        /** ステートをロードした (ソフトキーの CAPS・カナの表示を合わせる) */
+        fun onStateRestored()
     }
 
     /**
@@ -329,7 +331,10 @@ class Np2Menu(private val ctx: Context, private val host: Host) {
 
         override fun onStateLoaded(slot: Int, result: Int) {
             // ステートには CD-ROM のパスも入っている。次の起動で入れ直すパスを合わせる
-            if (result == Np2Native.LOAD_OK) DiskImageSource.saveCdPath(ctx, Np2Native.getHdd(Np2Native.CD_DRIVE))
+            if (result == Np2Native.LOAD_OK) {
+                DiskImageSource.saveCdPath(ctx, Np2Native.getHdd(Np2Native.CD_DRIVE))
+                host.onStateRestored()
+            }
             toast(when (result) {
                 Np2Native.LOAD_OK -> if (slot == QUICK_SLOT) "クイックセーブをロードしました" else "スロット $slot をロードしました"
                 Np2Native.LOAD_NOT_FOUND -> if (slot == QUICK_SLOT) "クイックセーブはまだありません" else "スロット $slot は空です"
