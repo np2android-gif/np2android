@@ -173,6 +173,7 @@ Android 向けの変更点と、NP2kai から取り込んだ部分の説明は�
 - [app/src/main/cpp/np2/diskimage/README-ANDROID.txt](app/src/main/cpp/np2/diskimage/README-ANDROID.txt)（FDD）
 - [app/src/main/cpp/np2/generic/README-ANDROID.txt](app/src/main/cpp/np2/generic/README-ANDROID.txt)（ホストドライブ）
 - [app/src/main/cpp/np2/i386c/README-ANDROID.txt](app/src/main/cpp/np2/i386c/README-ANDROID.txt)（IA-32 CPU コア）
+- [app/src/main/cpp/np2/bios/README-ANDROID.txt](app/src/main/cpp/np2/bios/README-ANDROID.txt)（代わりの BIOS）
 
 ## ライセンスと謝辞
 

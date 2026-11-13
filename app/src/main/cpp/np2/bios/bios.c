@@ -138,6 +138,11 @@ static void bios_reinitbyswitch(void) {
 		biosflag |= 0x40;
 	}
 	mem[MEMB_BIOS_FLAG1] = biosflag;
+#if defined(__ANDROID__)	/* ANDROID-BIOS: 新しいキーボード (PC-9801-119 系) の印。NP21/W・np2kai と同じ。
+							   Windows 2000 の NTDETECT は 0481h の bit3・bit6 でキーボードの種類を決め、
+							   どちらも 0 だと Windows が知らない種類になってキーボードが効かない */
+	mem[MEMB_BIOS_FLAG3] |= 0x40;
+#endif
 	extmem = pccore.extmem;
 	extmem = min(extmem, 14);
 	mem[MEMB_EXPMMSZ] = (UINT8)(extmem << 3);
