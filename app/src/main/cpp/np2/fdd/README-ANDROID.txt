@@ -62,6 +62,16 @@ CD-ROM (sxsicd)
     途中のセクタは今までどおり writesec() が次の DRQ と割り込みを出す。NP21/W rev107 の ideio.c
     (writeinit と ideio_w16) と同じ流れにしたが、コードは取り込まず xnp2 の形で書いた。
     ideio の構造体は変えていない (ステートの互換性はそのまま)。
+  cbus/ideio.c の READ VERIFY 40h/41h (/* ANDROID-IDE */ の印あり): xnp2 には無く、知らないコマンドとして
+    アボートしていた。Windows 2000 のセットアップは NTFS のフォーマットでこれを使うので、すべて失敗して
+    「パーティションをフォーマットできませんでした」になっていた。NP21/W rev107 と同じく、データは転送せず
+    受け付けてすぐ完了の割り込みを上げる。NP21/W は範囲を見ないが、ここでは開始セクタから個数分
+    (0 は 256) がディスクの総セクタ数を越えるときは、読み出し 20h と同じくアボートを返す。
+    CD-ROM (ATAPI) に来たときは今までどおりアボート。
+  注意: DOS の HDD の読み書きは、xnp2 の代わりの BIOS が HDD のイメージを直接読み書きするので、
+    cbus/ideio.c のポートを通らない (DOS の COPY の間に IDE のポートを使うのは、NECCDD・PATACD の
+    CD-ROM の ATAPI パケット A0h だけだった)。IDE の HDD のコマンドを変えたときは、DOS ではなく
+    Windows 2000 など自前の IDE ドライバを持つ OS で確かめる。
   fdd/sxsicd.c を中継ぎに書き替えた (xnp2 の元のコードは #else 側に残している):
     拡張子で np2kai の読み取りを選び (.cue・.ccd・.cdm・.mds、それ以外は ISO/生イメージ)、開いたあと
     np2kai のトラック表を xnp2 の形 (種類・番号・開始位置) に変換して ATAPI・CD-DA に渡す。

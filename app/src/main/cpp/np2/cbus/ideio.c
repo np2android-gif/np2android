@@ -535,6 +535,30 @@ static void IOOUTCALL ideio_o64e(UINT port, REG8 dat) {
 			}
 			break;
 
+		case 0x40:		// read verify (with retry)
+		case 0x41:		// read verify
+			/* ANDROID-IDE: データは転送せず、受け付けてすぐ完了の割り込みを上げる (NP21/W rev107 と同じ)。
+			   無いとアボートになり、Windows 2000 のセットアップの NTFS のフォーマットが失敗する。
+			   NP21/W と違い、ディスクより後ろのセクタを含むときは 20h と同じくアボートを返す */
+			TRACEOUT(("ideio: read verify"));
+			if (drv->device == IDETYPE_HDD) {
+				SXSIDEV	sxsi;
+				long	sec;
+				long	cnt;
+
+				sxsi = sxsi_getptr(drv->sxsidrv);
+				sec = getcursec(drv);
+				cnt = (drv->sc) ? drv->sc : 256;
+				if ((sxsi != NULL) && (sec >= 0) && (sec + cnt <= sxsi->totals)) {
+					drv->status = IDESTAT_DRDY | IDESTAT_DSC;
+					drv->error = 0;
+					setintr(drv);
+					break;
+				}
+			}
+			cmdabort(drv);
+			break;
+
 		case 0x91:		// set parameters
 			TRACEOUT(("ideio: set parameters dh=%x sec=%x",
 											drv->dr | drv->hd, drv->sc));
