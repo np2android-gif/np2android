@@ -78,6 +78,9 @@ static BRESULT setidentify(IDEDRV drv) {
 		for (i=0; i<10; i++) {
 			tmp[10+i] = (serial[i*2] << 8) + serial[i*2+1];
 		}
+		/* ANDROID-IDE: シリアル番号をドライブごとに変える (np2kai の setidentify から)。
+		   同じだと Windows 2000 が 2 台目の HDD を使わない */
+		tmp[12] = (tmp[12] & 0xff00) | ('0' + drv->sxsidrv);
 		tmp[22] = 4;
 		for (i=0; i<4; i++) {
 			tmp[23+i] = (firm[i*2] << 8) + firm[i*2+1];

@@ -46,6 +46,11 @@ CD-ROM (sxsicd)
     np2kai (wx_alpha 5939e0c6) の ideio_i430 から一部だけ取り込んだ。np2kai は 430h でバンクの代わりに 0/1 を
     返し、その値を ideio.bank に書き戻すが、ここでは戻り値の下位ビット (& 0x81) と bank への書き戻しは
     xnp2 のまま。432h の読み出しも変えていない。ideio の構造体は変えていない (ステートの互換性はそのまま)。
+  cbus/ideio.c の setidentify (/* ANDROID-IDE */ の印あり): IDENTIFY DEVICE で返す HDD のシリアル番号の
+    6 文字目 (ワード 12 の下位バイト) を '0' + SXSI のドライブ番号にして、ドライブごとに変える。同じ番号だと
+    Windows 2000 は 2 台目の HDD を IDENTIFY したあと使わない (読み出しを一度もしない)。np2kai の setidentify
+    にある同じ手当て (「シリアル番号はユニークにしておかないと駄目っぽい」) から。np2kai はワード 12 全体を
+    置き換えるが、ここでは文字列に NUL が入らないよう下位バイトだけを変えた。
     np2kai の 0000:05BA (IDE の接続フラグ、NT 4.0 向け) の設定は取り込んでいない。
     np2kai: MIT License, Copyright (c) 2017 AZO
   fdd/sxsicd.c を中継ぎに書き替えた (xnp2 の元のコードは #else 側に残している):
