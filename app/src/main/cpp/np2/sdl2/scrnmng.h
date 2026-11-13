@@ -17,6 +17,7 @@ extern "C" {
 void scrnmng_setwidth(int posx, int width);
 #define scrnmng_setextend(e)
 void scrnmng_setheight(int posy, int height);
+int scrnmng_getdispheight(void);
 const SCRNSURF *scrnmng_surflock(void);
 void scrnmng_surfunlock(const SCRNSURF *surf);
 

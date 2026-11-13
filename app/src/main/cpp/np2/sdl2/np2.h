@@ -16,7 +16,7 @@ enum {
 #else
 enum {
 	FULLSCREEN_WIDTH	= 640,
-	FULLSCREEN_HEIGHT	= 400
+	FULLSCREEN_HEIGHT	= 480		/* ANDROID-SCRN: 640x480 のゲスト画面も描けるように (scrnmng.c) */
 };
 #endif
 

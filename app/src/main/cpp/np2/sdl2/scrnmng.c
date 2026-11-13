@@ -32,6 +32,15 @@ static	SCRNMNG		scrnmng;
 static	SCRNSTAT	scrnstat;
 static	SCRNSURF	scrnsurf;
 
+/*
+ * ANDROID-SCRN: 描画面は 640x480 で作り、画面に出す高さ (s_disph) はゲストが使う高さに合わせて
+ * 400 か 480 にする。ゲストが 400 ラインより多く描くとき (Windows 2000 のセットアップなどの
+ * 640x480) だけ 480 にし、それ以外は今までどおり 640x400 を出す。高さは xnp2 本体の
+ * dispsync.c が scrnmng_setheight() で知らせる (dsync.scrnymax)。
+ */
+static	int			s_disph = 400;
+static	int			s_logh = 400;		/* SDL の論理サイズの高さ (400 か 480) */
+
 typedef struct {
 	int		xalign;
 	int		yalign;
@@ -95,7 +104,7 @@ BRESULT scrnmng_create(int width, int height) {
 	 */
 	s_sdlWindow = SDL_CreateWindow(app_name, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, width, height, SDL_WINDOW_FULLSCREEN_DESKTOP);
 	s_renderer = SDL_CreateRenderer(s_sdlWindow, -1, 0);
-	SDL_RenderSetLogicalSize(s_renderer, width, height);
+	SDL_RenderSetLogicalSize(s_renderer, width, s_logh);	/* ANDROID-SCRN: 表示は 400 ラインから */
 #if defined(SCREEN_BPP) && (SCREEN_BPP == 32)
 	/*
 	 * Android: GLES2 レンダラーは RGB565 テクスチャを持てず、SDL_UpdateTexture のたびに CPU で
@@ -180,6 +189,49 @@ void scrnmng_setheight(int posy, int height) {
 	scrnstat.height = height;
 }
 
+/* ANDROID-SCRN: 画面に出している高さ (400 か 480)。タッチの移動量の換算 (port/taskmng.c) に使う */
+int scrnmng_getdispheight(void) {
+
+	return(s_disph);
+}
+
+/* ANDROID-SCRN: 描画面のうち、ゲストが使う高さの分だけを画面に出す。メニューを開いている間は
+   メニューを作ったときの高さのまま変えない。
+   ウィンドウが 640x480 の比より縦長のとき (縦画面。Kotlin 側が枠を 4:3 にする) は、論理サイズを
+   常に 640x480 にして絵を上に寄せる。640x400 のときは下に 80 ライン分の黒い帯が出るが、絵の大きさと
+   上端は 640x480 のときと変わらない。横長のとき (横画面) は論理サイズを表示する高さに合わせ、
+   高さいっぱいに出す */
+static void present(void) {
+
+	SDL_Rect	rect;
+	int			h;
+	int			ww;
+	int			wh;
+	int			logh;
+
+	if (menuvram == NULL) {
+		h = (scrnstat.height > 400) ? 480 : 400;
+		if (h != s_disph) {
+			s_disph = h;
+		}
+	}
+	ww = 0;
+	wh = 0;
+	SDL_GetRendererOutputSize(s_renderer, &ww, &wh);
+	logh = ((ww > 0) && (wh * scrnmng.width >= ww * 480)) ? 480 : s_disph;
+	if (logh != s_logh) {
+		s_logh = logh;
+		SDL_RenderSetLogicalSize(s_renderer, scrnmng.width, logh);
+	}
+	rect.x = 0;
+	rect.y = 0;
+	rect.w = scrnmng.width;
+	rect.h = s_disph;
+	SDL_RenderClear(s_renderer);
+	SDL_RenderCopy(s_renderer, s_texture, &rect, &rect);
+	SDL_RenderPresent(s_renderer);
+}
+
 const SCRNSURF *scrnmng_surflock(void) {
 
 	SDL_Surface	*surface;
@@ -203,7 +255,7 @@ const SCRNSURF *scrnmng_surflock(void) {
 		scrnsurf.bpp = scrnmng.vram->bpp;
 	}
 	scrnsurf.width = min(scrnstat.width, 640);
-	scrnsurf.height = min(scrnstat.height, 400);
+	scrnsurf.height = min(scrnstat.height, 480);		/* ANDROID-SCRN */
 	scrnsurf.extend = 0;
 	return(&scrnsurf);
 }
@@ -223,7 +275,7 @@ const UINT8		*a;
 	rt.left = 0;
 	rt.top = 0;
 	rt.right = min(scrnstat.width, 640);
-	rt.bottom = min(scrnstat.height, 400);
+	rt.bottom = s_disph;		/* ANDROID-SCRN */
 #if defined(SIZE_QVGA)
 	rt.right >>= 1;
 	rt.bottom >>= 1;
@@ -306,9 +358,7 @@ const UINT8		*a;
 	SDL_UnlockSurface(surface);
 
 	SDL_UpdateTexture(s_texture, NULL, surface->pixels, surface->pitch);
-	SDL_RenderClear(s_renderer);
-	SDL_RenderCopy(s_renderer, s_texture, NULL, NULL);
-	SDL_RenderPresent(s_renderer);
+	present();		/* ANDROID-SCRN */
 }
 
 void scrnmng_surfunlock(const SCRNSURF *surf) {
@@ -323,9 +373,7 @@ void scrnmng_surfunlock(const SCRNSURF *surf) {
 				SDL_UnlockSurface(surface);
 
 				SDL_UpdateTexture(s_texture, NULL, surface->pixels, surface->pitch);
-				SDL_RenderClear(s_renderer);
-				SDL_RenderCopy(s_renderer, s_texture, NULL, NULL);
-				SDL_RenderPresent(s_renderer);
+				present();		/* ANDROID-SCRN */
 			}
 		}
 		else {
@@ -345,14 +393,14 @@ BRESULT scrnmng_entermenu(SCRNMENU *smenu) {
 		goto smem_err;
 	}
 	vram_destroy(scrnmng.vram);
-	scrnmng.vram = vram_create(scrnmng.width, scrnmng.height, FALSE,
+	scrnmng.vram = vram_create(scrnmng.width, s_disph, FALSE,	/* ANDROID-SCRN */
 																scrnmng.bpp);
 	if (scrnmng.vram == NULL) {
 		goto smem_err;
 	}
 	scrndraw_redraw();
 	smenu->width = scrnmng.width;
-	smenu->height = scrnmng.height;
+	smenu->height = s_disph;		/* ANDROID-SCRN */
 	smenu->bpp = (scrnmng.bpp == 32)?24:scrnmng.bpp;
 	return(SUCCESS);
 
@@ -486,8 +534,6 @@ const UINT8		*q;
 	SDL_UnlockSurface(surface);
 
 	SDL_UpdateTexture(s_texture, NULL, surface->pixels, surface->pitch);
-	SDL_RenderClear(s_renderer);
-	SDL_RenderCopy(s_renderer, s_texture, NULL, NULL);
-	SDL_RenderPresent(s_renderer);
+	present();		/* ANDROID-SCRN */
 }
 

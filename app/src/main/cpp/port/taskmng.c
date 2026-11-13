@@ -8,7 +8,7 @@
  *   - タップ直後に押して保持 : 左ボタンを押したままドラッグ (ダブルタップ＝ダブルクリック)
  *   - 2 本指タップ          : 右クリック
  * np2 メニューが開いているときは、SDL がタッチから合成するマウスイベント
- * (論理座標 640x400) でメニューを操作する。
+ * (論理座標 640x400、ゲストが 640x480 のときは 640x480) でメニューを操作する。
  */
 
 #include "compiler.h"
@@ -22,6 +22,7 @@
 #include "mousemng.h"
 #include "np2bridge.h"
 #include "scrndraw.h"
+#include "scrnmng.h"
 #include "np2.h"
 #include "fdd/fddfile.h"
 #include "diskimage/fd/fdd_d88.h"
@@ -141,6 +142,7 @@ static void touch_topc98(const SDL_TouchFingerEvent *f, float *dx, float *dy) {
 	int			w = 0;
 	int			h = 0;
 	float		scale;
+	float		disph;
 
 	win = SDL_GetWindowFromID(f->windowID);
 	if (win == NULL) {
@@ -149,13 +151,15 @@ static void touch_topc98(const SDL_TouchFingerEvent *f, float *dx, float *dy) {
 	if (win != NULL) {
 		SDL_GetWindowSize(win, &w, &h);
 	}
+	/* ANDROID-SCRN: 画面に出している高さは 400 か 480 (sdl2/scrnmng.c) */
+	disph = (float)scrnmng_getdispheight();
 	if ((w <= 0) || (h <= 0)) {
 		*dx = f->dx * 640.0f;
-		*dy = f->dy * 400.0f;
+		*dy = f->dy * disph;
 		return;
 	}
-	/* 640x400 をアスペクト維持で表示したときの 1 PC-98 画素あたりの画面画素 */
-	scale = min((float)w / 640.0f, (float)h / 400.0f);
+	/* 640x400 (または 640x480) をアスペクト維持で表示したときの 1 PC-98 画素あたりの画面画素 */
+	scale = min((float)w / 640.0f, (float)h / disph);
 	*dx = f->dx * (float)w / scale;
 	*dy = f->dy * (float)h / scale;
 }
