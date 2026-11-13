@@ -40,6 +40,14 @@ CD-ROM (sxsicd)
     panic (アプリが終了する) せず、ほかのコマンドと同じ cmdabort() でアボート (ERR・ABRT 04h、割り込みあり) を
     返す。FreeDOS(98) の PATACD.SYS はドライブを探すときに NOP (00h) を送り、そこでアプリが終了していた。
     NOP は ATA の仕様でも必ずアボートで返すコマンド。使わなくなった panic() は #if で外している。
+  cbus/ideio.c の ideio_i430 (/* ANDROID-IDE */ の印あり): ポート 430h を読んだとき、選んでいるバンク
+    (432h で選んだチャネル) のスレーブ (drv[1]) があれば bit6 を立てて返す。Windows 2000 の IDE ドライバは
+    bit6 が 1 のときだけスレーブを探し、無いとスレーブの起動ディスクが見えず STOP 0x7B (0xC0000034) になる。
+    np2kai (wx_alpha 5939e0c6) の ideio_i430 から一部だけ取り込んだ。np2kai は 430h でバンクの代わりに 0/1 を
+    返し、その値を ideio.bank に書き戻すが、ここでは戻り値の下位ビット (& 0x81) と bank への書き戻しは
+    xnp2 のまま。432h の読み出しも変えていない。ideio の構造体は変えていない (ステートの互換性はそのまま)。
+    np2kai の 0000:05BA (IDE の接続フラグ、NT 4.0 向け) の設定は取り込んでいない。
+    np2kai: MIT License, Copyright (c) 2017 AZO
   fdd/sxsicd.c を中継ぎに書き替えた (xnp2 の元のコードは #else 側に残している):
     拡張子で np2kai の読み取りを選び (.cue・.ccd・.cdm・.mds、それ以外は ISO/生イメージ)、開いたあと
     np2kai のトラック表を xnp2 の形 (種類・番号・開始位置) に変換して ATAPI・CD-DA に渡す。

@@ -315,6 +315,14 @@ static REG8 IOINPCALL ideio_i430(UINT port) {
 	ideio.bank[bank] = ret & (~0x80);
 	TRACEOUT(("ideio getbank%d %.2x [%.4x:%.8x]",
 									(port >> 1) & 1, ret, CPU_CS, CPU_EIP));
+	/* ANDROID-IDE: 430h では、選んでいるバンクにスレーブがあれば bit6 を立てる (np2kai の ideio_i430 から)。
+	   Windows 2000 は bit6 が 1 のときだけスレーブを探す。下位ビットと bank への書き戻しは xnp2 のまま */
+	if (!((port >> 1) & 1)) {
+		IDEDEV	dev = getidedev();
+		if ((dev != NULL) && (dev->drv[1].device != IDETYPE_NONE)) {
+			return((ret & 0x81) | 0x40);
+		}
+	}
 	return(ret & 0x81);
 }
 
