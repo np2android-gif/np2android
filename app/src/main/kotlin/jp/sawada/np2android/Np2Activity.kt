@@ -614,14 +614,17 @@ class Np2Activity : SDLActivity(), KeyboardController.Actions, Np2Menu.Host, Set
     }
 
     /**
-     * 縦画面: SDL の描画面を画面上部 (幅いっぱい × 16:10) に縮め、
+     * 縦画面: SDL の描画面を画面上部 (幅いっぱい × 4:3) に縮め、
      * 残りの領域に縦画面用キーボード (旧版のフルキーボード + 操作行) を置く。
+     * ANDROID-SCRN: 枠は常に 640x480 の比にする。ゲストが 640x400 のときは絵を上に寄せて下に黒い帯を出し
+     * (sdl2/scrnmng.c)、640x480 (Windows 2000 のセットアップなど) のときは枠いっぱいに出す。
+     * 切り替わってもソフトキーボードと絵の上端は動かない。
      */
     private fun placePortrait(w: Int, h: Int) {
         // 上端の角の丸み・カメラ穴で PC-98 画面が欠けないよう、その分だけ下げる
         val safe = safeArea()
         val screenTop = safe.top
-        val screenH = w * 10 / 16
+        val screenH = w * 3 / 4
         setSurfaceArea(screenTop, screenH)
         val kbTop = screenTop + screenH
         portraitKeyboard?.layoutParams = FrameLayout.LayoutParams(w, h - kbTop - safe.bottom, Gravity.TOP).apply {
