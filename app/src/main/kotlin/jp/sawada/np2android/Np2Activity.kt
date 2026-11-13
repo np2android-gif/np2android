@@ -519,8 +519,10 @@ class Np2Activity : SDLActivity(), KeyboardController.Actions, Np2Menu.Host, Set
 
     private fun setupOverlay(root: ViewGroup) {
         controller = KeyboardController(this)
-        // 起動時のレジュームで CAPS・カナがロックされていることがあるので、少し待ってから表示を合わせる
-        root.postDelayed({ controller.syncLocks() }, LOCK_SYNC_DELAY_MS)
+        // ANDROID-KBD: 今のロック状態に表示を合わせる (Activity が作り直されたとき用)。アプリの起動時は
+        // エミュレータの起動処理 (レジュームの読み込みを含む) が終わったときに知らせが来るので、そこで
+        // 合わせ直す (Np2Native の onLockSync)。それまでは getLockState() が 0 を返す
+        controller.syncLocks()
         val ov = FrameLayout(this)
         root.addView(ov, RelativeLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
@@ -837,8 +839,6 @@ class Np2Activity : SDLActivity(), KeyboardController.Actions, Np2Menu.Host, Set
 
     companion object {
         private const val TAG = "np2ui"
-        /** 起動後、レジュームの読み込みが終わってから CAPS・カナの表示を合わせるまでの待ち時間 */
-        private const val LOCK_SYNC_DELAY_MS = 3000L
         private const val REQUEST_IMPORT = 1001
         private const val REQUEST_KEYMAP = 1002
         private const val REQUEST_OPEN_DIRECT = 1003

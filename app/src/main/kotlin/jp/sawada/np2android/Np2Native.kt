@@ -16,7 +16,12 @@ object Np2Native {
     @JvmStatic external fun keyDown(code: Int)
     @JvmStatic external fun keyUp(code: Int)
     @JvmStatic external fun releaseAllKeys()
-    /** CAPS (bit0)・カナ (bit1) がロックされているか (エミュレータ側の状態) */
+    /**
+     * CAPS (bit0)・カナ (bit1) がロックされているか (エミュレータ側の状態)。
+     * ほかの呼び出しと違いキューを通さず、UI スレッドからエミュレータの変数を直接読む。読むのは
+     * 1 バイトずつ 2 つだけで、途中の値になることはない。エミュレータのスレッドと重なってずれても、
+     * 次の syncLocks() で合う。
+     */
     @JvmStatic external fun getLockState(): Int
 
     // ---- マウス ----
@@ -145,6 +150,8 @@ object Np2Native {
         fun onCdResult(result: Int, path: String)
         /** ゲストの CPU が止まる例外 (トリプルフォルトなど) で、エミュレータがリセットした */
         fun onCpuReset()
+        /** 起動処理 (レジュームの読み込みを含む) が終わった。CAPS・カナの表示をエミュレータに合わせる */
+        fun onLockSync()
     }
 
     const val CD_INSERTED = 0
@@ -188,6 +195,7 @@ object Np2Native {
                 8 -> l.onCdResult(b, text ?: "")
                 9 -> if (b == 0) l.onResumeConflict(text ?: "") else l.onResumeFailed()
                 10 -> l.onCpuReset()
+                11 -> l.onLockSync()
             }
         }
     }

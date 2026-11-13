@@ -56,6 +56,12 @@ void np2bridge_diskerror(const char *path);
 void np2bridge_cpureset(void);
 
 /**
+ * ANDROID-KBD: 起動処理 (リセットとレジュームの読み込み) が終わったことを Kotlin に通知する。
+ * ソフトキーの CAPS・カナの表示をエミュレータのロック状態に合わせてもらう。エミュレータスレッドから呼ぶ
+ */
+void np2bridge_startupdone(void);
+
+/**
  * FDD の挿入 (diskdrv_readyfddex) の結果を Kotlin に通知する (エミュレータスレッドから呼ぶ)。
  * 形式やサイズが合わないイメージは np2 がマウントを拒否するので、失敗を表示できるようにする。
  */

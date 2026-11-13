@@ -191,6 +191,9 @@ int np2_main(int argc, char *argv[]) {
 			goto np2main_err5;
 		}
 	}
+#if defined(__ANDROID__)	/* ANDROID-KBD: ソフトキーの CAPS・カナの表示を合わせてもらう */
+	np2bridge_startupdone();
+#endif
 
 	while(taskmng_isavail()) {
 		taskmng_rol();

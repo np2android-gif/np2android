@@ -400,6 +400,10 @@ class Np2Menu(private val ctx: Context, private val host: Host) {
             Toast.makeText(ctx, R.string.cpu_reset, Toast.LENGTH_LONG).show()
         }
 
+        override fun onLockSync() {
+            host.onStateRestored()
+        }
+
         override fun onStateConflict(slot: Int, info: String) {
             val check = StateDiskCheck(info)
             val b = builder()

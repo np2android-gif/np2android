@@ -45,7 +45,8 @@ enum {
 	EV_HDD_FAILED		= 7,	/* a = sxsi drive, text = パス。リセット時に開けなかった */
 	EV_CD_SET			= 8,	/* b = 0:挿入 / 1:失敗 / 2:ドライブ無し (IDE 無効) / 3:取り出し, text = パス */
 	EV_RESUME			= 9,	/* b = 0:ディスクが違う (text = 差分。answerResume で答える) / 1:読めない */
-	EV_CPU_RESET		= 10	/* ANDROID-CPU: ia32_panic (トリプルフォルトなど) でリセットした */
+	EV_CPU_RESET		= 10,	/* ANDROID-CPU: ia32_panic (トリプルフォルトなど) でリセットした */
+	EV_LOCK_SYNC		= 11	/* ANDROID-KBD: 起動処理 (レジュームの読み込みを含む) が終わった。ソフトキーの CAPS・カナの表示を合わせ直す */
 };
 
 static jclass		s_nativeClass;
@@ -195,9 +196,19 @@ NP2JNI(keyUp)(JNIEnv *env, jclass cls, jint code)
 	push(NP2CMD_KEYUP, code & 0x7f, 0);
 }
 
-/* ANDROID-KBD: CAPS (bit0)・カナ (bit1) がロックされているか。ソフトキーの表示を合わせるのに使う */
+/* ANDROID-KBD: CAPS (bit0)・カナ (bit1) がロックされているか。ソフトキーの表示を合わせるのに使う。
+   ほかの JNI と違ってキューを通さず、UI スレッドからエミュレータの変数 (keystat.ref の 2 バイト) を
+   直接読む。読むだけで、1 バイトの読み出しは途中の値にならないので、エミュレータのスレッドと
+   重なっても壊れない (ずれても、次の syncLocks() で合う) */
+static volatile int s_lockready;	/* ANDROID-KBD: 起動処理が終わり、keystat が使える */
+
 JNIEXPORT jint JNICALL Java_jp_sawada_np2android_Np2Native_getLockState(JNIEnv *env, jclass cls)
 {
+	/* 起動処理が終わる前は keystat が初期化されておらず、ロック中と読み違えるので 0 を返す
+	   (終わったら EV_LOCK_SYNC で知らせ、そこで読み直してもらう) */
+	if (!s_lockready) {
+		return 0;
+	}
 	return (jint)keystat_getlock();
 }
 
@@ -852,6 +863,14 @@ BOOL np2bridge_resume(const char *path)
 void np2bridge_diskerror(const char *path)
 {
 	notify(EV_DISK_ERROR, 0, 0, path);
+}
+
+/* ANDROID-KBD: 起動処理 (リセットとレジュームの読み込み) が終わった。ソフトキーの CAPS・カナの表示を
+   エミュレータのロック状態に合わせてもらう */
+void np2bridge_startupdone(void)
+{
+	s_lockready = 1;
+	notify(EV_LOCK_SYNC, 0, 0, NULL);
 }
 
 void np2bridge_cpureset(void)
