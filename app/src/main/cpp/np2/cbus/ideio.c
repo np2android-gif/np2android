@@ -274,6 +274,20 @@ read_err:
 	cmdabort(drv);
 }
 
+/* ANDROID-IDE: PIO の書き込み (30h/31h) の受付。ATA の決まりどおり、ここでは割り込まずに DRQ を立てて
+   最初のセクタのデータを待つ (NP21/W rev107 の writeinit と同じ)。割り込みはセクタを書き終えるごとに
+   ideio_w16 で上げる。受付で割り込み、最後のセクタのあとに割り込まないと、Windows 2000 の atapi.sys は
+   書き込みの完了を待ってタイムアウトし、セットアップの区画の作成で止まる */
+static void writeinit(IDEDRV drv) {
+
+	drv->bufdir = IDEDIR_OUT;
+	drv->buftc = IDETC_TRANSFEREND;
+	drv->bufpos = 0;
+	drv->bufsize = 512;
+	drv->status = IDESTAT_DRDY | IDESTAT_DSC | IDESTAT_DRQ;
+	drv->error = 0;
+}
+
 static void writesec(IDEDRV drv) {
 
 	if (drv->device == IDETYPE_NONE) {
@@ -514,7 +528,7 @@ static void IOOUTCALL ideio_o64e(UINT port, REG8 dat) {
 			if (drv->device == IDETYPE_HDD) {
 				drv->mulcnt = 0;
 				drv->multhr = 1;
-				writesec(drv);
+				writeinit(drv);		/* ANDROID-IDE */
 			}
 			else {
 				cmdabort(drv);
@@ -874,6 +888,12 @@ void IOOUTCALL ideio_w16(UINT port, REG16 value) {
 					drv->sc--;
 					if (drv->sc) {
 						writesec(drv);
+					}
+					else {
+						/* ANDROID-IDE: 最後のセクタを書き終えたら割り込む (NP21/W rev107 と同じ) */
+						drv->status = IDESTAT_DRDY | IDESTAT_DSC;
+						drv->error = 0;
+						setintr(drv);
 					}
 					break;
 
