@@ -68,6 +68,19 @@ CD-ROM (sxsicd)
     受け付けてすぐ完了の割り込みを上げる。NP21/W は範囲を見ないが、ここでは開始セクタから個数分
     (0 は 256) がディスクの総セクタ数を越えるときは、読み出し 20h と同じくアボートを返す。
     CD-ROM (ATAPI) に来たときは今までどおりアボート。
+  cbus/ideio.c の FLUSH CACHE E7h (/* ANDROID-IDE */ の印あり): xnp2 はすぐに完了の割り込みを上げていた。
+    Windows 2000 の GUI セットアップでは、ESENT (\WINNT\security の edb*.log) がログをほぼ空のまま切り替え続け、
+    区画が埋まっていた (Q5 指示書 15章: すぐ完了だとログ 165〜533 個、遅らせると 3 個)。NP21/W rev107 と同じく
+    BSY を立て、20,000 クロック後 (約 78MHz で 0.25 ミリ秒) に nevent の NEVENT_SASIIO で ideioint() が BSY を解いて
+    割り込む。NP21/W rev107 の setdintr2・ideioint2 の考え方を取り込み、次の点は xnp2 の形で書き直した。
+    ・イベントが来たら 4 台のうち BSY のドライブを解く (BSY を立てるのは FLUSH だけ)。NP21/W は今選んでいる
+      チャネルだけを解くので、待ちの間に 432h でチャネルを切り替えると BSY のまま残る。
+    ・nIEN (割り込み禁止) のときもイベントは予約して BSY を解き、割り込みだけ上げない (NP21/W は予約しない)。
+    ・SRST (74Ch) と ideio_reset で、待ち中のイベントを取り消す。
+    ideioint は statsave.tbl の evtproc に登録した ('eide')。登録しないと待ち中のステートセーブで関数が保存されず、
+    ロード後に BSY のまま止まる。表に足しただけなので、今までのステートも読める。ideio の構造体は変えていない。
+    SASI と IDE は同時に使わない (pccore で SASI のときは IDE を外す) ので、NEVENT_SASIIO を分け合っても重ならない。
+    NP21/W: MIT 相当 (np2 と同じライセンス)
   注意: DOS の HDD の読み書きは、xnp2 の代わりの BIOS が HDD のイメージを直接読み書きするので、
     cbus/ideio.c のポートを通らない (DOS の COPY の間に IDE のポートを使うのは、NECCDD・PATACD の
     CD-ROM の ATAPI パケット A0h だけだった)。IDE の HDD のコマンドを変えたときは、DOS ではなく

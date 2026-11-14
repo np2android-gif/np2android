@@ -152,6 +152,38 @@ static void setintr(IDEDRV drv) {
 	}
 }
 
+/* ANDROID-IDE: FLUSH CACHE (E7h) は BSY を立て、IDE_FLUSHCLOCK クロック後に完了の割り込みを上げる
+   (NP21/W rev107 の setdintr2・ideioint2 と同じ遅れ)。すぐに完了させると、Windows 2000 の GUI セットアップで
+   ESENT のログ (\WINNT\security\edb*.log) が増え続けてディスクが埋まる。
+   BSY を立てるのはこのコマンドだけなので、イベントが来たら 4 台のうち BSY のドライブを解く
+   (待ちの間に 432h でチャネルを切り替えても、FLUSH を出したドライブが解ける)。
+   nIEN (割り込み禁止) のときも BSY は解き、割り込みだけ上げない。
+   イベントはステートセーブに入る (statsave.tbl の evtproc)。ideio の構造体は変えていない。 */
+#define	IDE_FLUSHCLOCK	20000
+
+void ideioint(NEVENTITEM item) {
+
+	UINT	i;
+	IDEDRV	drv;
+	BOOL	irq;
+
+	irq = FALSE;
+	for (i=0; i<4; i++) {
+		drv = ideio.dev[i >> 1].drv + (i & 1);
+		if ((drv->device != IDETYPE_NONE) && (drv->status & IDESTAT_BSY)) {
+			drv->status &= ~IDESTAT_BSY;
+			if (!(drv->ctrl & IDECTRL_NIEN)) {
+				ideio.bank[0] = (UINT8)((i >> 1) | 0x80);
+				irq = TRUE;
+			}
+		}
+	}
+	if (irq) {
+		pic_setirq(IDE_IRQ);
+	}
+	(void)item;
+}
+
 static void cmdabort(IDEDRV drv) {
 
 	TRACEOUT(("ideio: cmdabort()"));
@@ -655,9 +687,11 @@ static void IOOUTCALL ideio_o64e(UINT port, REG8 dat) {
 
 		case 0xe7:		// flush cache
 			TRACEOUT(("ideio: flush cache"));
-			drv->status = IDESTAT_DRDY;
+			if (!(drv->status & IDESTAT_BSY)) {		/* ANDROID-IDE: 完了は ideioint() で */
+				drv->status = IDESTAT_DRDY | IDESTAT_BSY;
+				nevent_set(NEVENT_SASIIO, IDE_FLUSHCLOCK, ideioint, NEVENT_ABSOLUTE);
+			}
 			drv->error = 0;
-			setintr(drv);
 			break;
 
 		case 0xec:		// identify device
@@ -704,6 +738,7 @@ static void IOOUTCALL ideio_o74c(UINT port, REG8 dat) {
 	dev->drv[1].ctrl = dat;
 	if (modify & IDECTRL_SRST) {
 		if (dat & IDECTRL_SRST) {
+			nevent_reset(NEVENT_SASIIO);		/* ANDROID-IDE: 待ち中の FLUSH の完了を取り消す */
 			dev->drv[0].status = 0;
 			dev->drv[0].error = 0;
 			dev->drv[1].status = 0;
@@ -1091,6 +1126,7 @@ void ideio_reset(const NP2CFG *pConfig) {
 	IDEDRV	drv;
 
 	ZeroMemory(&ideio, sizeof(ideio));
+	nevent_reset(NEVENT_SASIIO);		/* ANDROID-IDE: 待ち中の FLUSH の完了を取り消す */
 	for (i=0; i<4; i++) {
 		drv = ideio.dev[i >> 1].drv + (i & 1);
 		devinit(drv, i);

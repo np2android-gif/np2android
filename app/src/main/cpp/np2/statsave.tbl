@@ -31,6 +31,9 @@ static const PROCTBL evtproc[] = {
 #if defined(SUPPORT_SASI)
 			{PROCID('e','s','a','s'), sasiioint},
 #endif
+#if defined(SUPPORT_IDEIO)
+			{PROCID('e','i','d','e'), ideioint},		/* ANDROID-IDE */
+#endif
 #if defined(SUPPORT_SCSI)
 			{PROCID('e','s','c','s'), scsiioint},
 #endif
