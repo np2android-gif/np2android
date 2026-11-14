@@ -56,6 +56,11 @@
     <string name="cancel">キャンセル</string>
     <string name="ok">OK</string>
 
+    <!-- I/O ポート (np2cfg.sysiomsk) -->
+    <string name="io_port16_title">I/O ポート</string>
+    <string name="io_port16">I/O ポートを 16 ビットで見分ける (PC-9821)</string>
+    <string name="io_port16_note">オフにすると古い PC-98 と同じく、本体の機器が I/O ポートの上位バイトを無視します。Windows 2000 などはオンで使ってください。古いソフトで動かないものがあれば、オフにして試してください。\n切り替えたら、ゲストをリセットしてください。</string>
+
     <!-- ホストドライブ (hostdrv) -->
     <string name="hostdrv_title">ホストドライブ</string>
     <string name="hostdrv_enable">ホストドライブを使う</string>

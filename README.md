@@ -149,7 +149,8 @@ E:HOSTDRV G
 
 - **ファイル管理**: アプリの作業フォルダ（np2.cfg・ステート・取り込んだイメージの置き場所）を、端末の「ファイル」画面で開きます。ほかのアプリのファイル選択画面からも「Neko Project II for Android」として見えます。
   - np2.cfg を編集した内容は、次にアプリを起動したときに反映されます。編集する前にアプリを終了しておくのが確実です。
-- **設定**: マウスの速さ、フルキーボードの高さ（横画面）、ソフトキーの不透明度、右の余白のキー（横画面）、キーを押したときの振動、[ホストドライブ](#ホストドライブ)。
+- **設定**: マウスの速さ、フルキーボードの高さ（横画面）、ソフトキーの不透明度、右の余白のキー（横画面）、キーを押したときの振動、[ホストドライブ](#ホストドライブ)、I/O ポートの見分け方。
+  - 「I/O ポートを 16 ビットで見分ける (PC-9821)」は既定でオンです（NP21/W と同じ）。オフにすると古い PC-98 と同じく、本体の機器が I/O ポートの上位バイトを無視します。古いソフトで動かないものがあれば、オフにして試してください。切り替えたら、ゲストをリセットしてください。
 
 ## 既知の制限
 
@@ -175,6 +176,7 @@ Android 向けの変更点と、NP2kai から取り込んだ部分の説明は�
 - [app/src/main/cpp/np2/i386c/README-ANDROID.txt](app/src/main/cpp/np2/i386c/README-ANDROID.txt)（IA-32 CPU コア）
 - [app/src/main/cpp/np2/bios/README-ANDROID.txt](app/src/main/cpp/np2/bios/README-ANDROID.txt)（代わりの BIOS）
 - [app/src/main/cpp/np2/sdl2/README-ANDROID.txt](app/src/main/cpp/np2/sdl2/README-ANDROID.txt)（画面の表示）
+- [app/src/main/cpp/np2/io/README-ANDROID.txt](app/src/main/cpp/np2/io/README-ANDROID.txt)（I/O ポートの振り分け）
 
 ## ライセンスと謝辞
 

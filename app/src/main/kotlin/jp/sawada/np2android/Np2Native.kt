@@ -51,6 +51,11 @@ object Np2Native {
      * 無効にするとマウント中でも外れる (ゲストで使い直すには再起動が要る)。write / delete は enabled のときだけ効く
      */
     @JvmStatic external fun setHostDrv(enabled: Boolean, write: Boolean, delete: Boolean)
+    /**
+     * I/O ポートを 16 ビットで見分けるか (true = PC-9821 / NP21/W の既定、false = 古い PC-98)。
+     * 起動時はエミュレータスレッドが動き出す前 (onCreate) に渡す。効くのは次のリセットまたはステートロードから
+     */
+    @JvmStatic external fun setSysIoMask(port16: Boolean)
     /** sxsi のドライブ番号。[getHdd] に渡すと、入っている CD-ROM のパスが返る */
     const val CD_DRIVE = 0x02
     /** 現在のディスクのパス (表示用。未挿入なら null) */

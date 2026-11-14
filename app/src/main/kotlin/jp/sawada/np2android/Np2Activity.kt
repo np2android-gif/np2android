@@ -78,6 +78,8 @@ class Np2Activity : SDLActivity(), KeyboardController.Actions, Np2Menu.Host, Set
         Np2Native.setStartupCd(DiskImageSource.startupCdPath(this))
         // ホストドライブの設定 (np2.cfg には保存しない)。np2 が設定を読んだ直後に反映される
         settings.applyHostDrv()
+        // I/O ポートの見分け方 (np2.cfg には保存しない)。最初のリセットより前に反映される
+        settings.applySysIoMask()
         if (lost.isNotEmpty()) {
             dialog()
                 .setTitle(R.string.disk_lost_title)

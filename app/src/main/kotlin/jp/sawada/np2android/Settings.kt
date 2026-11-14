@@ -68,6 +68,18 @@ class Settings(context: Context) {
      */
     fun applyHostDrv() = Np2Native.setHostDrv(hostDrv, hostDrvWrite, false)
 
+    /**
+     * I/O ポートを 16 ビットで見分ける (PC-9821。NP21/W の SYSIOMSK=ff00 と同じ)。オフにすると古い PC-98 と同じく
+     * 本体の機器が上位バイトを無視する。設定の正はここで、np2.cfg には保存しない。
+     * 変えたら [applySysIoMask] でエミュレータに渡す (効くのはゲストのリセットから)
+     */
+    var ioPort16: Boolean
+        get() = prefs.getBoolean("io_port16", true)
+        set(v) = prefs.edit().putBoolean("io_port16", v).apply()
+
+    /** I/O ポートの見分け方をエミュレータに渡す。起動時はエミュレータスレッドが動き出す前 (onCreate) に呼ぶ */
+    fun applySysIoMask() = Np2Native.setSysIoMask(ioPort16)
+
     /** 「ファイル管理」の注意書きを表示済みか */
     var fileManagerNoticeShown: Boolean
         get() = prefs.getBoolean("file_manager_notice_shown", false)
@@ -191,6 +203,23 @@ object SettingsDialog {
             }
         })
         root.addView(hdWrite)
+
+        // ---- I/O ポート ----
+        root.addView(TextView(context).apply {
+            setTextAppearance(android.R.style.TextAppearance_DeviceDefault_Medium)
+            text = context.getString(R.string.io_port16_title)
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+            .apply { topMargin = (16 * dp).toInt() })
+        root.addView(TextView(context).apply {
+            setTextAppearance(android.R.style.TextAppearance_DeviceDefault_Small)
+            text = context.getString(R.string.io_port16_note)
+        })
+        root.addView(Switch(context).apply {
+            text = context.getString(R.string.io_port16)
+            isChecked = settings.ioPort16
+            gravity = Gravity.CENTER_VERTICAL
+            setOnCheckedChangeListener { _, b -> settings.ioPort16 = b; settings.applySysIoMask() }
+        })
 
         // ---- 物理キーの割り当て (旧版の keymap ファイル) ----
         val status = TextView(context)
