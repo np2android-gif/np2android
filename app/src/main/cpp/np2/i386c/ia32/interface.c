@@ -85,7 +85,9 @@ ia32_initreg(void)
 	CPU_ADRSMASK = 0x000fffff;
 
 	tlb_init();
-#if defined(USE_FPU)
+#if defined(USE_FPU) && defined(SUPPORT_FPU_SOFTFLOAT3)
+	fpu_initialize(1);	/* ANDROID-FPU: NP2kai と同じ。命令表を SoftFloat 版にし、FNINIT 相当 */
+#elif defined(USE_FPU)
 	fpu_init();
 #endif
 }

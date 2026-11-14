@@ -103,6 +103,9 @@ do { \
 	_ADD_EIP(1); \
 } while (/*CONSTCOND*/ 0)
 
+/* ANDROID-FPU: NP2kai の fpemul_softfloat3.cpp が使う名前 (NP2kai でも opCache が無ければこの形) */
+#define	GET_MODRM_PCBYTE(v)		GET_PCBYTE(v)
+
 #define	GET_PCBYTES(v) \
 do { \
 	(v) = __CBW(cpu_codefetch(CPU_EIP)); \

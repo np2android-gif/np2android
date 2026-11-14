@@ -13,6 +13,7 @@ set(PORT ${CMAKE_CURRENT_SOURCE_DIR}/port)
 
 # CPU コア: OFF = i286c (0.86 の Android テンプレートと同じ), ON = IA-32
 option(NP2_IA32 "Use IA-32 CPU core" OFF)
+option(NP2_FPU "ANDROID-FPU: Use the SoftFloat 3e x87 FPU from NP2kai (IA-32 only)" OFF)
 
 file(GLOB NP2_SOURCES CONFIGURE_DEPENDS
     ${NP2}/calendar.c
@@ -70,6 +71,18 @@ if(NP2_IA32)
     # IA32_REBOOT_ON_PANIC: ia32_panic (トリプルフォルトなど) でアプリを終了せずにリセットする
     # (np2kai と同じ定義。Android 向けの処理は interface.c の ANDROID-CPU)
     set(NP2_CPU_DEFINES CPUCORE_IA32 IA32_REBOOT_ON_PANIC)
+    # ANDROID-FPU: NP2_FPU=ON で NP2kai の SoftFloat 3e 版 FPU を入れる (486DX を名乗る)。
+    # OFF なら今までどおり fpdummy.c だけ (486SX)。D8h〜DFh は起動時に fpu_initialize が差し替える
+    if(NP2_FPU)
+        file(GLOB NP2_FPU_SOURCES CONFIGURE_DEPENDS
+            ${NP2}/i386c/ia32/instructions/fpu/softfloat3/*.c
+        )
+        list(APPEND NP2_CPU_SOURCES
+            ${NP2}/i386c/ia32/instructions/fpu/fpemul_softfloat3.cpp
+            ${NP2_FPU_SOURCES}
+        )
+        list(APPEND NP2_CPU_DEFINES USE_FPU SUPPORT_FPU_SOFTFLOAT3)
+    endif()
 else()
     file(GLOB NP2_CPU_SOURCES CONFIGURE_DEPENDS
         ${NP2}/debugsub.c

@@ -31,7 +31,7 @@ android {
         }
         externalNativeBuild {
             cmake {
-                arguments += listOf("-DANDROID_STL=c++_static", "-DNP2_IA32=ON")
+                arguments += listOf("-DANDROID_STL=c++_static", "-DNP2_IA32=ON", "-DNP2_FPU=ON")
             }
         }
     }

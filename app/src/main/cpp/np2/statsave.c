@@ -38,6 +38,9 @@
 #include "hostdrv.h"
 #include "calendar.h"
 #include "keystat.h"
+#if defined(CPUCORE_IA32) && defined(USE_FPU) && defined(SUPPORT_FPU_SOFTFLOAT3)
+#include "ia32/instructions/fpu/fp.h"
+#endif
 
 #if defined(MACOS)
 #define	CRCONST		str_cr
@@ -1533,6 +1536,9 @@ const SFENTRY	*tblterm;
 	FONTPTR_HIGH = fontrom + cgwindow.high;
 #endif
 	MEMM_VRAM(vramop.operate);
+#if defined(CPUCORE_IA32) && defined(USE_FPU) && defined(SUPPORT_FPU_SOFTFLOAT3)	/* ANDROID-FPU: restore SoftFloat rounding/flags (as NP2kai) */
+	fpu_statesave_load();
+#endif
 	fddmtr_reset();
 	soundmng_play();
 

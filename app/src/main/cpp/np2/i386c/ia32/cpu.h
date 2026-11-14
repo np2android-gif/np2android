@@ -35,6 +35,9 @@
 #define IA32_CPU_CPU_H__
 
 #include "interface.h"
+#if defined(SUPPORT_FPU_SOFTFLOAT3)	/* ANDROID-FPU: NP2kai の SoftFloat 3e 版 FPU */
+#include "instructions/fpu/softfloat3/softfloat.h"
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -203,6 +206,64 @@ typedef struct {
 	UINT32		offset;
 } FPU_PTR;
 
+#if defined(SUPPORT_FPU_SOFTFLOAT3)
+/*
+ * ANDROID-FPU: NP2kai (wx_alpha 5939e0c) の i386c/ia32/cpu.h と同じ配置。
+ * SSE・MMX・DOSBox 版の項目は入れていない。
+ */
+typedef struct {
+	UINT16		control;
+	UINT16		status;
+	UINT16		op;
+	UINT16		tag;
+
+	FPU_PTR		inst;
+	FPU_PTR		data;
+} FPU_REGS_S;
+
+typedef enum {
+	TAG_Valid = 0,
+	TAG_Zero  = 1,
+	TAG_Weird = 2,
+	TAG_Empty = 3
+} FP_TAG;
+
+typedef enum {
+	ROUND_Nearest = 0,
+	ROUND_Down    = 1,
+	ROUND_Up      = 2,
+	ROUND_Chop    = 3
+} FP_RND;
+
+typedef union {
+	sw_extFloat80_t d;
+	double d64;
+	struct {
+		UINT32 lower;
+		SINT32 upper;
+		SINT16 ext;
+	} l;
+	struct {
+		UINT32 lower;
+		UINT32 upper;
+		SINT16 ext;
+	} ul;
+	SINT64 ll;
+	UINT8 b[10];
+} FP_REG;
+
+typedef struct {
+	UINT8		top;
+	UINT8		pc;
+	UINT8		rc;
+	UINT8		dmy[1];
+
+	FP_REG		reg[FPU_REG_NUM+1];
+	FP_TAG		tag[FPU_REG_NUM+1];
+	FP_RND		round;
+	UINT8		mmxenable;	/* NP2kai では USE_MMX のときだけ。fpemul_softfloat3.cpp が 0 を書くので置く */
+} FPU_STAT_S;
+#else
 typedef struct {
 	UINT16		control;
 	UINT16		status;
@@ -231,6 +292,7 @@ typedef struct {
 
 	FP_REG		reg[FPU_REG_NUM];
 } FPU_STAT;
+#endif
 
 typedef struct {
 	CPU_REGS	cpu_regs;
@@ -239,7 +301,10 @@ typedef struct {
 	CPU_INST	cpu_inst;
 	CPU_INST	cpu_inst_default;
 
-#if defined(USE_FPU)
+#if defined(USE_FPU) && defined(SUPPORT_FPU_SOFTFLOAT3)
+	FPU_REGS_S	fpu_regs;
+	FPU_STAT_S	fpu_stat;
+#elif defined(USE_FPU)
 	FPU_REGS	fpu_regs;
 	FPU_STAT	fpu_stat;
 #endif
@@ -681,7 +746,11 @@ void dbg_printf(const char *str, ...);
 #define	FPU_STAT_PC		FPU_STAT.pc
 #define	FPU_STAT_RC		FPU_STAT.rc
 
+#if defined(SUPPORT_FPU_SOFTFLOAT3)	/* ANDROID-FPU: NP2kai と同じく、FPU_ST はレジスタの番号を返す */
+#define	FPU_ST(i)		((FPU_STAT_TOP+ (i) ) & 7)
+#else
 #define	FPU_ST(i)		FPU_STAT.reg[((i) + FPU_STAT_TOP) & 7]
+#endif
 #define	FPU_REG(i)		FPU_STAT.reg[i]
 
 /* FPU status register */
@@ -702,7 +771,14 @@ void dbg_printf(const char *str, ...);
 
 #define	FP_TOP_SHIFT	11
 #define	FP_TOP_GET()	((FPU_STATUSWORD & FP_TOP_FLAG) >> FP_TOP_SHIFT)
+#if defined(SUPPORT_FPU_SOFTFLOAT3)	/* ANDROID-FPU: NP2kai と同じ形 */
+#define	FP_TOP_SET(v)	 \
+do { \
+	FPU_STATUSWORD = ((FPU_STATUSWORD & ~FP_TOP_FLAG) | (((v) & 0x7) << FP_TOP_SHIFT)); \
+} while (/*CONSTCOND*/0)
+#else
 #define	FP_TOP_SET(v)	((FPU_STATUSWORD & ~FP_TOP_FLAG) | ((v) << FP_TOP_SHIFT))
+#endif
 
 #define	FPU_STAT_TOP_INC() \
 do { \

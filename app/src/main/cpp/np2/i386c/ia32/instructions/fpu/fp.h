@@ -43,6 +43,23 @@ void ESC5(void);
 void ESC6(void);
 void ESC7(void);
 
+#if defined(USE_FPU) && defined(SUPPORT_FPU_SOFTFLOAT3)
+/* ANDROID-FPU: NP2kai の SoftFloat 3e 版 FPU (fpemul_softfloat3.cpp) */
+void CPUCALL fpu_initialize(int initreg);
+void fpu_statesave_load(void);
+
+void SF_FPU_FINIT(void);
+void SF_FPU_FXSAVERSTOR(void);
+void SF_ESC0(void);
+void SF_ESC1(void);
+void SF_ESC2(void);
+void SF_ESC3(void);
+void SF_ESC4(void);
+void SF_ESC5(void);
+void SF_ESC6(void);
+void SF_ESC7(void);
+#endif
+
 #ifdef __cplusplus
 }
 #endif
