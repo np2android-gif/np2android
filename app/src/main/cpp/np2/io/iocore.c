@@ -425,7 +425,9 @@ BRESULT iocore_build(void) {
 	}
 	sys->type = IOFUNC_SYS;
 	for (i=0; i<256; i++) {
-		if (!(i & 0x0c)) {
+		/* ANDROID-IO: like NP21/W rev37 (np2cfg.sysiomsk). With 0xff00 the system devices answer only at
+		 * upper byte 0, so probes such as 9100h no longer reach the PIC (Windows 2000 net card detection) */
+		if (!(i & (0x0c | (np2cfg.sysiomsk >> 8)))) {
 			ioc->base[i] = sys;
 		}
 		else {

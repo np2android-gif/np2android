@@ -299,6 +299,24 @@ NP2JNI(setHostDrv)(JNIEnv *env, jclass cls, jboolean enabled, jboolean write, jb
 	push(NP2CMD_SETHOSTDRV, 0, 0);		/* 起動前で積めなくても、起動時に np2bridge_hostdrv() が読む */
 }
 
+/*
+ * ANDROID-IO: I/O ポートを 16 ビットで見分けるか (np2cfg.sysiomsk)。設定の正は Kotlin の Settings で、
+ * np2.cfg には保存しない。ホストドライブと同じく、起動時は onCreate で渡しておき、np2bridge_sysiomsk() が
+ * initload の後に読む。I/O の表は起動・リセット・ステートロードで作り直すので、変更はその時に効く
+ */
+static SDL_atomic_t s_sysiomsk = { 0xff00 };
+
+NP2JNI(setSysIoMask)(JNIEnv *env, jclass cls, jboolean port16)
+{
+	SDL_AtomicSet(&s_sysiomsk, (port16) ? 0xff00 : 0x0000);
+	push(NP2CMD_SETSYSIOMSK, 0, 0);		/* 起動前で積めなくても、起動時に np2bridge_sysiomsk() が読む */
+}
+
+void np2bridge_sysiomsk(void)
+{
+	np2cfg.sysiomsk = (UINT16)SDL_AtomicGet(&s_sysiomsk);
+}
+
 void np2bridge_hostdrv(void)
 {
 	int		v;
@@ -1039,6 +1057,10 @@ BOOL np2bridge_handle(const SDL_Event *e)
 
 		case NP2CMD_SETHOSTDRV:
 			np2bridge_hostdrv();
+			break;
+
+		case NP2CMD_SETSYSIOMSK:
+			np2bridge_sysiomsk();
 			break;
 
 		default:

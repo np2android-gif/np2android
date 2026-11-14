@@ -142,6 +142,8 @@ struct tagNP2Config
 	OEMCHAR	fontfile[MAX_PATH];
 	OEMCHAR	biospath[MAX_PATH];
 	OEMCHAR	hdrvroot[MAX_PATH];
+
+	UINT16	sysiomsk;		/* ANDROID-IO: 0xff00 = system devices only at upper byte 0 (PC-9821, NP21/W SYSIOMSK), 0x0000 = ignore bits other than 0x0c00 (old PC-98) */
 };
 typedef struct tagNP2Config  NP2CFG;		/*!< The define of config */
 

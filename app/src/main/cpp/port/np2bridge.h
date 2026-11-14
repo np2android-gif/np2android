@@ -27,8 +27,16 @@ enum {
 	NP2CMD_EXIT,
 	NP2CMD_REDRAW,			/* 描画面が作り直されたので全体を描き直す */
 	NP2CMD_SETCD,			/* data2 = char* path (NULL で取り出し)。CD-ROM (IDE セカンダリ・マスター) */
-	NP2CMD_SETHOSTDRV		/* ホストドライブの設定 (setHostDrv で保存した値) を反映する */
+	NP2CMD_SETHOSTDRV,		/* ホストドライブの設定 (setHostDrv で保存した値) を反映する */
+	NP2CMD_SETSYSIOMSK		/* I/O ポートの見分け方 (setSysIoMask で保存した値) を np2cfg に反映する */
 };
+
+/**
+ * ANDROID-IO: Kotlin から setSysIoMask で渡された設定を np2cfg.sysiomsk に反映する。
+ * 効くのは次に I/O の表を作るとき (リセット・ステートロード)。
+ * 起動時 (initload の後) と NP2CMD_SETSYSIOMSK で、エミュレータスレッドから呼ぶ
+ */
+void np2bridge_sysiomsk(void);
 
 /**
  * ANDROID-HOSTDRV: Kotlin から setHostDrv で渡された設定を np2cfg.hdrvroot / hdrvacc に反映する。
