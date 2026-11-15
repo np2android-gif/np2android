@@ -10,6 +10,7 @@ FDD・HDD・CD-ROM のイメージの処理には **NP2kai** のコードを取�
 以前の版と署名が違うため、以前の版が入っている場合は、いったんアンインストールしてから入れてください。
 
 - 対応: Android 7.0 以上（arm64-v8a・x86_64）
+- エミュレートする CPU: 486DX 相当（FPU 付き）
 - 動作確認: Xperia XZ3（Android 10）、Pixel 9a（Android 17）
 - 最新版: v0.86-a12
 
@@ -219,6 +220,8 @@ Android 版のために書いたコードは修正 BSD ライセンスです（[
 |---|---|
 | Neko Project II / Xnp2 0.86（ねこさん開発ちーむ、NONAKA Kimihiro 氏ほか） | 修正 BSD ライセンス |
 | IA-32 CPU コア（i386c） | BSD ライセンス |
+| FPU エミュレーション（NP2kai、NONAKA Kimihiro 氏・SimK 氏） | BSD ライセンス |
+| Berkeley SoftFloat 3e（The Regents of the University of California） | BSD ライセンス（3 条項） |
 | NP2kai（AZO234 氏ほか） | MIT ライセンス |
 | SDL2 | zlib ライセンス |
 | zlib | zlib ライセンス |
