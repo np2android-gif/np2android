@@ -81,6 +81,15 @@ CD-ROM (sxsicd)
     ロード後に BSY のまま止まる。表に足しただけなので、今までのステートも読める。ideio の構造体は変えていない。
     SASI と IDE は同時に使わない (pccore で SASI のときは IDE を外す) ので、NEVENT_SASIIO を分け合っても重ならない。
     NP21/W: MIT 相当 (np2 と同じライセンス)
+  CD-ROM の名前 (/* ANDROID-IDE */ の印あり):
+    cbus/atapicmd.c の INQUIRY (YUIDEBUG の側): 製品名を "CD-ROM DRIVE:251" から "CD-ROM DRIVE:98 " に、
+    版を "4.09" から "1.0 " にした。":251" のままだと Windows 2000 の IDE ドライバが NEC の CD チェンジャー
+    (ATAPI 2.5) と見なし、デバイスの開始に失敗して (コード 10) ドライブ文字が付かなかった。直したのはこちら。
+    cbus/ideio.c の IDENTIFY の型名 (cdrom_model): "NEC CD-ROM DRIVE" を "NEC CD-ROM DRIVE:98" にした。
+    こちらは合わせただけで、これだけでは直らない (Q6 指示書 14章の試験 A)。
+    どちらも NP21/W rev107 と np2kai (wx_alpha 5939e0c6) の cbus/atapicmd.c・cbus/ideio.c と同じ値。
+    MODE SENSE のページ 2Ah は変えていない。DOS の NECCDD・PATACD でも読めることを確かめた。
+    未対応: Windows 2000 の起動中に CD を入れ替えても伝わらない (NP21/W・np2kai の MEDIA_CHANGE_WAIT が候補)。
   注意: DOS の HDD の読み書きは、xnp2 の代わりの BIOS が HDD のイメージを直接読み書きするので、
     cbus/ideio.c のポートを通らない (DOS の COPY の間に IDE のポートを使うのは、NECCDD・PATACD の
     CD-ROM の ATAPI パケット A0h だけだった)。IDE の HDD のコマンドを変えたときは、DOS ではなく

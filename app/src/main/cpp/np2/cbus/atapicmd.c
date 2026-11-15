@@ -32,8 +32,11 @@ static const UINT8 cdrom_inquiry[] = {
 	0x00,0x00,0x00,	// Reserved
 	'N', 'E', 'C', ' ', ' ', ' ', ' ', ' ',	// Vendor ID
 	'C', 'D', '-', 'R', 'O', 'M', ' ', 'D',	// Product ID
-	'R', 'I', 'V', 'E', ':', '2', '5', '1',	// Product ID
-	'4', '.', '0', '9'	// Product Revision Level
+	/* ANDROID-IDE: 製品名を "CD-ROM DRIVE:98 "、版を "1.0 " にした (NP21/W rev107・np2kai と同じ)。
+	 * ":251" (版 4.09) だと Windows 2000 が NEC の CD チェンジャーと見なし、開始に失敗する
+	 * (コード 10、ドライブ文字が付かない) */
+	'R', 'I', 'V', 'E', ':', '9', '8', ' ',	// Product ID
+	'1', '.', '0', ' '	// Product Revision Level
 #else
 	0x05,	// CD-ROM
 	0x80,	// bit7: Removable Medium Bit, other: Reserved

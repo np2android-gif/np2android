@@ -52,7 +52,9 @@ static const char model[] = "QUANTUM FIREBALL CR                     ";
 
 static const char cdrom_serial[] = "1.0                 ";
 static const char cdrom_firm[]   = "        ";
-static const char cdrom_model[]  = "NEC CD-ROM DRIVE                        ";
+/* ANDROID-IDE: 型名を NP21/W rev107・np2kai と同じ "NEC CD-ROM DRIVE:98" に合わせた。
+ * Windows 2000 のコード 10 を直したのはこちらではなく、atapicmd.c の INQUIRY */
+static const char cdrom_model[]  = "NEC CD-ROM DRIVE:98                     ";
 
 static BRESULT setidentify(IDEDRV drv) {
 
