@@ -28,6 +28,9 @@
 #include "ia32.mcr"
 
 I386CORE	i386core;
+#if defined(USE_FPU) && defined(SUPPORT_FPU_SOFTFLOAT3)
+I386FPU		i386fpu;	/* ANDROID-FPU: ステートの "FPU" (cpu.h) */
+#endif
 
 UINT8	*reg8_b20[0x100];
 UINT8	*reg8_b53[0x100];

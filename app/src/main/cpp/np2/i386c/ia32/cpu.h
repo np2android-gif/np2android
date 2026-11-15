@@ -301,13 +301,13 @@ typedef struct {
 	CPU_INST	cpu_inst;
 	CPU_INST	cpu_inst_default;
 
-#if defined(USE_FPU) && defined(SUPPORT_FPU_SOFTFLOAT3)
-	FPU_REGS_S	fpu_regs;
-	FPU_STAT_S	fpu_stat;
-#elif defined(USE_FPU)
+#if defined(USE_FPU) && !defined(SUPPORT_FPU_SOFTFLOAT3)
 	FPU_REGS	fpu_regs;
 	FPU_STAT	fpu_stat;
 #endif
+	/* ANDROID-FPU: SoftFloat 版の FPU の状態は I386STAT に入れず、i386fpu (下) に置く。
+	   "CPU286" の大きさが FPU 無しの版と同じになり、a6〜a12 のステートがそのまま読める。
+	   FPU の状態はステートの "FPU" の項目 (statsave.tbl) に入る */
 
 	/* protected by cpu shut */
 	UINT8		cpu_type;
@@ -334,6 +334,16 @@ typedef struct {
 } I386CORE;
 
 extern I386CORE		i386core;
+
+#if defined(USE_FPU) && defined(SUPPORT_FPU_SOFTFLOAT3)
+/* ANDROID-FPU: FPU の状態 (ステートの "FPU")。リセットでは ia32_initreg の fpu_initialize(1) が FNINIT 相当にする */
+typedef struct {
+	FPU_REGS_S	fpu_regs;
+	FPU_STAT_S	fpu_stat;
+} I386FPU;
+
+extern I386FPU		i386fpu;
+#endif
 
 #define	CPU_STATSAVE	i386core.s
 
@@ -730,7 +740,11 @@ void dbg_printf(const char *str, ...);
 /*
  * FPU
  */
+#if defined(USE_FPU) && defined(SUPPORT_FPU_SOFTFLOAT3)
+#define	FPU_REGS		i386fpu.fpu_regs	/* ANDROID-FPU */
+#else
 #define	FPU_REGS		CPU_STATSAVE.fpu_regs
+#endif
 #define	FPU_CTRLWORD		FPU_REGS.control
 #define	FPU_STATUSWORD		FPU_REGS.status
 #define	FPU_INSTPTR		FPU_REGS.inst
@@ -741,7 +755,11 @@ void dbg_printf(const char *str, ...);
 #define	FPU_DATAPTR_OFFSET	FPU_REGS.data.offset
 #define	FPU_DATAPTR_SEG		FPU_REGS.data.seg
 
+#if defined(USE_FPU) && defined(SUPPORT_FPU_SOFTFLOAT3)
+#define	FPU_STAT		i386fpu.fpu_stat	/* ANDROID-FPU */
+#else
 #define	FPU_STAT		CPU_STATSAVE.fpu_stat
+#endif
 #define	FPU_STAT_TOP		FPU_STAT.top
 #define	FPU_STAT_PC		FPU_STAT.pc
 #define	FPU_STAT_RC		FPU_STAT.rc
