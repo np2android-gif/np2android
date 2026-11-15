@@ -602,25 +602,36 @@ static void FPU_FLD1(void) {
 	FPU_prepush();
 	FPU_STAT.reg[FPU_STAT_TOP].d = c_double_to_floatx80(1.0);
 }
+/*
+ * ANDROID-FPU: FLDL2T・FLDL2E・FLDPI・FLDLG2・FLDLN2 は 80 ビット (仮数 64 ビット) の値を直接入れる。
+ * NP2kai は double の定数から変換していたので、仮数の下 11 ビットが 0 になっていた。
+ * 値は Intel の資料と同じ最近接偶数のもの。丸めのモード (RC) による最後のビットの違いは真似ていない。
+ */
+static INLINE sw_extFloat80_t fpu_const80(UINT16 signexp, UINT64 signif) {
+	sw_extFloat80_t r;
+	r.signExp = signexp;
+	r.signif = signif;
+	return r;
+}
 static void FPU_FLDL2T(void) {
 	FPU_prepush();
-	FPU_STAT.reg[FPU_STAT_TOP].d = c_double_to_floatx80(L2T);
+	FPU_STAT.reg[FPU_STAT_TOP].d = fpu_const80(0x4000, QWORD_CONST(0xD49A784BCD1B8AFE));	/* ANDROID-FPU */
 }
 static void FPU_FLDL2E(void) {
 	FPU_prepush();
-	FPU_STAT.reg[FPU_STAT_TOP].d = c_double_to_floatx80(L2E);
+	FPU_STAT.reg[FPU_STAT_TOP].d = fpu_const80(0x3FFF, QWORD_CONST(0xB8AA3B295C17F0BC));	/* ANDROID-FPU */
 }
 static void FPU_FLDPI(void) {
 	FPU_prepush();
-	FPU_STAT.reg[FPU_STAT_TOP].d = c_double_to_floatx80(PI);
+	FPU_STAT.reg[FPU_STAT_TOP].d = fpu_const80(0x4000, QWORD_CONST(0xC90FDAA22168C235));	/* ANDROID-FPU */
 }
 static void FPU_FLDLG2(void) {
 	FPU_prepush();
-	FPU_STAT.reg[FPU_STAT_TOP].d = c_double_to_floatx80(LG2);
+	FPU_STAT.reg[FPU_STAT_TOP].d = fpu_const80(0x3FFD, QWORD_CONST(0x9A209A84FBCFF799));	/* ANDROID-FPU */
 }
 static void FPU_FLDLN2(void) {
 	FPU_prepush();
-	FPU_STAT.reg[FPU_STAT_TOP].d = c_double_to_floatx80(LN2);
+	FPU_STAT.reg[FPU_STAT_TOP].d = fpu_const80(0x3FFE, QWORD_CONST(0xB17217F7D1CF79AC));	/* ANDROID-FPU */
 }
 static void FPU_FLDZ(void) {
 	FPU_prepush();
@@ -1205,7 +1216,7 @@ void SF_FPU_FXSAVERSTOR(void) {
 		break;
 #endif
 	default:
-		ia32_panic("invalid opcode = %02x\n", op);
+		EXCEPTION(UD_EXCEPTION, 0);	/* ANDROID-FPU: NP2kai は ia32_panic (この関数は xnp2 からは呼ばれない) */
 		break;
 	}
 }
@@ -1561,7 +1572,7 @@ SF_ESC1(void)
 			break;
 
 		default:
-			ia32_panic("ESC1: invalid opcode = %02x\n", op);
+			EXCEPTION(UD_EXCEPTION, 0);	/* ANDROID-FPU: NP2kai は ia32_panic (idx は 0〜7 なので来ない) */
 			break;
 		}
 	} else {
