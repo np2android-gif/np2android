@@ -108,6 +108,12 @@ CD-ROM (sxsicd)
     センスキーは np2kai と同じ 02h (NOT READY)。
     Windows 2000 の問い合わせ方に合わせたもので、他の保護モードの OS (Windows 95/98、NT 4.0) は未確認。
     入れ替えた直後に一度「準備ができていない」と出ることがあっても、実機でも起こる動きの範囲とみている。
+  CD を入れずに起動したとき (/* ANDROID-IDE */ の印あり。Q7 指示書 10章):
+    cbus/ideio.c の setidentify は、ファイルが開いていない (SXSIFLAG_READY でない) と失敗を返していたので、
+    CD-ROM に CD が入っていないと IDENTIFY PACKET DEVICE が中止になり、Windows 2000 の IDE ドライバが
+    CD-ROM ドライブを見つけなかった (ドライブ文字が無く、後から CD を入れても使えない。a14 まで)。
+    CD-ROM のときは開いていなくても答えるようにした。CD-ROM の答えはシリアル・型名・固定の値だけで、
+    ディスクの形の値は使わない。np2kai (wx_alpha 5939e0c6) の setidentify と同じ条件。
   注意: DOS の HDD の読み書きは、xnp2 の代わりの BIOS が HDD のイメージを直接読み書きするので、
     cbus/ideio.c のポートを通らない (DOS の COPY の間に IDE のポートを使うのは、NECCDD・PATACD の
     CD-ROM の ATAPI パケット A0h だけだった)。IDE の HDD のコマンドを変えたときは、DOS ではなく

@@ -65,7 +65,10 @@ static BRESULT setidentify(IDEDRV drv) {
 	UINT32	size;
 
 	sxsi = sxsi_getptr(drv->sxsidrv);
-	if ((sxsi == NULL) || (!(sxsi->flag & SXSIFLAG_READY))) {
+	/* ANDROID-IDE: CD-ROM は CD が入っていなくても IDENTIFY に答える (np2kai の setidentify から)。
+	   答えないと、CD を入れずに起動した Windows 2000 が CD-ROM ドライブを見つけない */
+	if ((sxsi == NULL) ||
+		(!(sxsi->flag & SXSIFLAG_READY) && (drv->device != IDETYPE_CDROM))) {
 		return(FAILURE);
 	}
 
