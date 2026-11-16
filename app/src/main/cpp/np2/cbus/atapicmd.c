@@ -134,13 +134,33 @@ void atapicmd_a0(IDEDRV drv) {
 		TRACEOUT(("atapicmd: test unit ready"));
 		if (!(drv->media & IDEIO_MEDIA_LOADED)) {
 			/* medium not present */
+			drv->swapwait = 0;	/* ANDROID-IDE: 本当に空を見せたので、入れたときは 28h だけでよい */
 			ATAPI_SET_SENSE_KEY(drv, ATAPI_SK_NOT_READY);
 			drv->asc = ATAPI_ASC_MEDIUM_NOT_PRESENT;
 			senderror(drv);
 			break;
 		}
+		/* ANDROID-IDE: CD をその場で入れ替えたとき、保護モード (VM86 でない) のドライバ (Windows 2000 など) には
+		   ATAPI_SWAPWAIT 回「媒体が無い (3Ah)」と答えてから、今までどおり 28h を返す。Windows 2000 は
+		   約 4 秒ごとに TEST UNIT READY で CD を確かめ、空だと 0.2 秒ほどの間にもう 2 回確かめる。
+		   その 3 回とも空のときだけ入れ替えに気づき、そうでないと前の CD の中身を見せ続ける。
+		   DOS のドライバ (NECCDD・PATACD。リアルモードか VM86) は 28h だけで気づくので、今までどおり。
+		   残りの回数は IDEDRV の swapwait (ステートに入る) に持つ。
+		   NP2kai (atapicmd.c の MEDIA_CHANGE_WAIT、fdd/sxsi.c の cdchange_*) が CD を一度取り出して待つのと
+		   同じ目的を、待ちを作らずに果たすよう書き直した */
+		if ((drv->swapwait != 0) && (drv->media & IDEIO_MEDIA_CHANGED)) {
+			if (CPU_STAT_PM && !CPU_STAT_VM86) {
+				drv->swapwait--;
+				ATAPI_SET_SENSE_KEY(drv, ATAPI_SK_NOT_READY);
+				drv->asc = ATAPI_ASC_MEDIUM_NOT_PRESENT;
+				senderror(drv);
+				break;
+			}
+			drv->swapwait = 0;
+		}
 		if (drv->media & IDEIO_MEDIA_CHANGED) {
 			drv->media &= ~IDEIO_MEDIA_CHANGED;
+			drv->swapwait = 0;	/* ANDROID-IDE */
 			ATAPI_SET_SENSE_KEY(drv, ATAPI_SK_NOT_READY);
 			drv->asc = ATAPI_ASC_NOT_READY_TO_READY_TRANSITION;
 			senderror(drv);

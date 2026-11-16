@@ -1204,6 +1204,9 @@ do_notify:
 			break;
 
 		case 0:
+			if (drv->media & IDEIO_MEDIA_LOADED) {	/* ANDROID-IDE: “ü‚Á‚Ä‚¢‚½ CD ‚ð•Â‚¶‚½ (atapicmd.c ‚Ì TEST UNIT READY) */
+				drv->swapwait = ATAPI_SWAPWAIT;
+			}
 			drv->media &= ~(IDEIO_MEDIA_LOADED|IDEIO_MEDIA_COMBINE);
 			break;
 	}

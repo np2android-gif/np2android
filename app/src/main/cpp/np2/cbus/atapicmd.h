@@ -46,6 +46,9 @@ enum {
 extern "C" {
 #endif
 
+/* ANDROID-IDE: CD を入れ替えた後、保護モードのドライバに「空」と答える回数 (atapicmd.c) */
+#define	ATAPI_SWAPWAIT	3
+
 void atapicmd_a0(IDEDRV drv);
 
 void atapi_dataread(IDEDRV drv);

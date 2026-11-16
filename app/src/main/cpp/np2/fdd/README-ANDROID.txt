@@ -89,7 +89,25 @@ CD-ROM (sxsicd)
     こちらは合わせただけで、これだけでは直らない (Q6 指示書 14章の試験 A)。
     どちらも NP21/W rev107 と np2kai (wx_alpha 5939e0c6) の cbus/atapicmd.c・cbus/ideio.c と同じ値。
     MODE SENSE のページ 2Ah は変えていない。DOS の NECCDD・PATACD でも読めることを確かめた。
-    未対応: Windows 2000 の起動中に CD を入れ替えても伝わらない (NP21/W・np2kai の MEDIA_CHANGE_WAIT が候補)。
+  CD の入れ替え (/* ANDROID-IDE */ の印あり。Q7 指示書 5〜9章):
+    xnp2 はメニューで CD を入れ替えると、その場で閉じて開き直す。Windows 2000 は約 4 秒ごとに
+    TEST UNIT READY で CD を確かめ、「媒体が無い」と答えられると 0.2 秒ほどの間にもう 2 回確かめて、
+    3 回とも空のときだけ入れ替えに気づく。その場の入れ替えでは空の時が無く、前の CD の中身を見せ続けた。
+    そこで、入っていた CD を閉じたとき (cbus/ideio.c の ideio_notify) に IDEDRV の swapwait を
+    ATAPI_SWAPWAIT (3) にし、保護モード (VM86 でない) から来た TEST UNIT READY には、新しい CD が
+    入っていても swapwait の回数だけ「媒体が無い (3Ah)」と答えてから、今までどおり 28h を返す
+    (cbus/atapicmd.c)。swapwait は次のときに 0 に戻る: CD が本当に空のときの TEST UNIT READY
+    (空を見せたので、入れたときは 28h だけでよい)、28h を返したとき、DOS (リアルモードか VM86) から
+    TEST UNIT READY が来たとき (DOS の NECCDD・PATACD は 28h だけで気づくので、今までどおり)、
+    リセット (ideio の初期化で IDEDRV を 0 にする)。CD を入れていなかったところへ入れたときは立たない。
+    swapwait は IDEDRV の使っていなかった dmy の名前を変えたもので、構造体の大きさと並びは変わらない
+    (ステートの形は a14 と同じ。a14 以前のステートでは 0、a15 のステートを a14 で読むと無視される)。
+    np2kai (wx_alpha 5939e0c6) の fdd/sxsi.c の cdchange_* と cbus/atapicmd.c の MEDIA_CHANGE_WAIT が、
+    CD を一度取り出して数秒待ってから入れるのと同じ目的を、待ちを作らずに果たすよう書き直した
+    (待ちを作る形は、待ちの間のステートセーブと「CD を挿入してください」の窓で Windows 2000 が気づかなかった)。
+    センスキーは np2kai と同じ 02h (NOT READY)。
+    Windows 2000 の問い合わせ方に合わせたもので、他の保護モードの OS (Windows 95/98、NT 4.0) は未確認。
+    入れ替えた直後に一度「準備ができていない」と出ることがあっても、実機でも起こる動きの範囲とみている。
   注意: DOS の HDD の読み書きは、xnp2 の代わりの BIOS が HDD のイメージを直接読み書きするので、
     cbus/ideio.c のポートを通らない (DOS の COPY の間に IDE のポートを使うのは、NECCDD・PATACD の
     CD-ROM の ATAPI パケット A0h だけだった)。IDE の HDD のコマンドを変えたときは、DOS ではなく

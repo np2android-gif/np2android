@@ -47,7 +47,7 @@ typedef struct {
 	UINT32	sector;		// アクセスセクタ (LBA)
 	UINT32	nsectors;	// 総セクタ数
 	UINT16	secsize;	// セクタサイズ
-	UINT16	dmy;
+	UINT16	swapwait;	// ANDROID-IDE: CD を入れ替えた後、保護モードのドライバに「空」と答える残りの回数 (元は dmy)
 
 	// buffer management
 	UINT	bufpos;
