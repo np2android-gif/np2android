@@ -12,7 +12,7 @@ FDD・HDD・CD-ROM のイメージの処理には **NP2kai** のコードを取�
 - 対応: Android 7.0 以上（arm64-v8a・x86_64）
 - エミュレートする CPU: 486DX 相当（FPU 付き）
 - 動作確認: Xperia XZ3（Android 10）、Pixel 9a（Android 17）
-- 最新版: v0.86-a14
+- 最新版: v0.86-a15
 
 ## 目次
 
