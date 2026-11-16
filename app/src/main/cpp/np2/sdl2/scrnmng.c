@@ -6,6 +6,7 @@
 #include	"scrndraw.h"
 #include	"vramhdl.h"
 #include	"menubase.h"
+#include	<android/log.h>		/* ANDROID-SCRN */
 
 static SDL_Window *s_sdlWindow;
 static SDL_Renderer *s_renderer;
@@ -40,6 +41,8 @@ static	SCRNSURF	scrnsurf;
  */
 static	int			s_disph = 400;
 static	int			s_logh = 400;		/* SDL の論理サイズの高さ (400 か 480) */
+static	int			s_outw = 0;			/* ANDROID-SCRN: 論理サイズを決めたときの描く先の幅と高さ */
+static	int			s_outh = 0;
 
 typedef struct {
 	int		xalign;
@@ -219,8 +222,17 @@ static void present(void) {
 	wh = 0;
 	SDL_GetRendererOutputSize(s_renderer, &ww, &wh);
 	logh = ((ww > 0) && (wh * scrnmng.width >= ww * 480)) ? 480 : s_disph;
-	if (logh != s_logh) {
+	/* ANDROID-SCRN: 描く先の大きさが変わったときも設定し直す。起動の直後は窓が一度縦いっぱい
+	   (キーボードの分を引く前) で作られてから縮む。その知らせを SDL が取りこぼすと、絵が縦いっぱいの
+	   窓の真ん中に置かれたまま残り、下にずれる (Q7 課題 B) */
+	if ((logh != s_logh) || (ww != s_outw) || (wh != s_outh)) {
+		if ((ww != s_outw) || (wh != s_outh)) {
+			__android_log_print(ANDROID_LOG_INFO, "NP2SCRN", "output %dx%d -> %dx%d, logical %dx%d",
+								s_outw, s_outh, ww, wh, scrnmng.width, logh);
+		}
 		s_logh = logh;
+		s_outw = ww;
+		s_outh = wh;
 		SDL_RenderSetLogicalSize(s_renderer, scrnmng.width, logh);
 	}
 	rect.x = 0;
