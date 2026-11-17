@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Environment
+import android.os.SystemClock
 import android.os.storage.StorageManager
 import android.provider.DocumentsContract
 import android.provider.OpenableColumns
@@ -248,32 +249,61 @@ object DiskImageSource {
         val ids = mutableSetOf<String>()
         // 前回の CD-ROM (np2.cfg には保存されないので、アプリの設定に持っている)
         savedCdPath(context)?.takeIf { it.startsWith("saf:/") }?.let { ids += it.removePrefix("saf:/").substringBefore('/') }
-        val prefix = "saf:/".toByteArray()
+        val t0 = SystemClock.elapsedRealtime()
         for (f in files.map { java.io.File(dir, it) }.filter { it.isFile }) {
-            val b = runCatching { f.readBytes() }.getOrNull() ?: continue
-            var i = 0
-            while (i <= b.size - prefix.size) {
-                if (b[i] == prefix[0] && (prefix.indices).all { b[i + it] == prefix[it] }) {
-                    val start = i + prefix.size
-                    var end = start
-                    while (end < b.size && end - start < 40 && isIdByte(b[end])) end++
-                    if (end < b.size && b[end] == '/'.code.toByte() && end > start) {
-                        ids += String(b, start, end - start, Charsets.US_ASCII)
-                    }
-                    i = end
-                } else {
-                    i++
-                }
-            }
+            runCatching { scanSafIds(f, ids) }.onFailure { Log.w(TAG, "scan failed: ${f.name}", it) }
         }
-        Log.i(TAG, "referenced at startup: $ids")
+        Log.i(TAG, "referenced at startup: $ids (${SystemClock.elapsedRealtime() - t0} ms)")
         return ids
     }
 
-    private fun isIdByte(c: Byte): Boolean {
-        val ch = c.toInt().toChar()
-        return ch in '0'..'9' || ch in 'a'..'z' || ch in 'A'..'Z' || ch == '-' || ch == '_'
+    private const val SAF_PREFIX = "saf:/"
+    private const val MAX_ID = 40
+    private const val SCAN_CHUNK = 1 shl 20
+
+    /**
+     * [f] に書かれた仮想パス "saf:/<ID>/" の ID を [ids] に足す。ステートは 68MB になることがあり、1 バイトずつ
+     * 調べると XZ3 で 1 ファイル 10 秒以上かかって起動が止まっていた (Q8)。1MB ずつ読み、Latin-1 の文字列にして
+     * indexOf で探す。塊の境目をまたぐ仮想パスを取りこぼさないよう、各塊は「接頭辞 + ID の最大の長さ + '/'」の
+     * 分だけ余分に読み、その手前で始まるものだけをその塊で数える。探し方 (見つけたら ID の終わりから
+     * 続きを探す) は前の 1 バイトずつの実装と同じ。
+     */
+    private fun scanSafIds(f: java.io.File, ids: MutableSet<String>) {
+        val extra = SAF_PREFIX.length + MAX_ID + 1
+        val buf = ByteArray(SCAN_CHUNK + extra)
+        java.io.RandomAccessFile(f, "r").use { raf ->
+            val size = raf.length()
+            var pos = 0L
+            while (pos < size) {
+                raf.seek(pos)
+                var n = 0
+                while (n < buf.size) {
+                    val r = raf.read(buf, n, buf.size - n)
+                    if (r <= 0) break
+                    n += r
+                }
+                if (n <= 0) break
+                val s = String(buf, 0, n, Charsets.ISO_8859_1)
+                // この塊で数える範囲。ファイルの終わりを含む塊は最後まで
+                val owned = if (pos + n >= size) n else SCAN_CHUNK
+                var i = 0
+                while (true) {
+                    val p = s.indexOf(SAF_PREFIX, i)
+                    if (p < 0 || p >= owned) { i = maxOf(i, owned); break }
+                    val start = p + SAF_PREFIX.length
+                    var end = start
+                    while (end < n && end - start < MAX_ID && isIdChar(s[end])) end++
+                    if (end < n && s[end] == '/' && end > start) ids += s.substring(start, end)
+                    i = end
+                    if (i >= owned) break
+                }
+                pos += i
+            }
+        }
     }
+
+    private fun isIdChar(ch: Char): Boolean =
+        ch in '0'..'9' || ch in 'a'..'z' || ch in 'A'..'Z' || ch == '-' || ch == '_'
 
     /**
      * URI を開いてネイティブに登録する。"rw" で開けなければ "r" のまま読み取り専用にする。
