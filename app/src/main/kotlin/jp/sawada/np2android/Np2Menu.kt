@@ -46,6 +46,24 @@ class Np2Menu(private val ctx: Context, private val host: Host) {
     /** 表示中のレジュームの確認 (二重に出さない) */
     private var resumeDialog: AlertDialog? = null
 
+    /** 起動時のダイアログで「今は開けない」と知らせた履歴の ID (同じことを HDD の失敗で重ねて出さない) */
+    var startupUnavailableIds: Set<String> = emptySet()
+
+    /** 履歴のイメージが今は開けなかった。[id] があれば「履歴から消す」を選べる */
+    fun showUnavailable(name: String, id: String?) {
+        val b = builder()
+            .setTitle(R.string.disk_unavailable_now_title)
+            .setMessage(ctx.getString(R.string.disk_unavailable_now, name))
+            .setPositiveButton(R.string.ok, null)
+        if (id != null) {
+            b.setNegativeButton(R.string.disk_remove_history) { _, _ ->
+                DiskImageSource.remove(ctx, id)
+                toast(ctx.getString(R.string.disk_removed_history, name))
+            }
+        }
+        b.show()
+    }
+
     private val fdd1 = DiskTarget(DiskImages.Kind.FDD, 0, "FDD1")
     private val fdd2 = DiskTarget(DiskImages.Kind.FDD, 1, "FDD2")
     private val hdd1 = DiskTarget(DiskImages.Kind.HDD, 0x00, "HDD1", SASI_EXTENSIONS)
@@ -56,7 +74,7 @@ class Np2Menu(private val ctx: Context, private val host: Host) {
     fun show() {
         // 次の起動で入れ直す CD-ROM を、実際に入っているものに合わせる (強制終了の後のレジュームなどで、
         // 保存してあるパスと食い違うことがある)。メニューを開けるのはエミュレータが動いているときだけ
-        DiskImageSource.saveCdPath(ctx, Np2Native.getHdd(Np2Native.CD_DRIVE))
+        DiskImageSource.syncCdPath(ctx, Np2Native.getHdd(Np2Native.CD_DRIVE))
         val items = listOf<Pair<String, () -> Unit>>(
             "FDD1: ${current(fdd1)}" to { diskMenu(fdd1) },
             "FDD2: ${current(fdd2)}" to { diskMenu(fdd2) },
@@ -194,7 +212,12 @@ class Np2Menu(private val ctx: Context, private val host: Host) {
         // CD-ROM は大きく、書き込みもしないので、コピー方式は用意しない
         if (t.kind != DiskImages.Kind.CD) items += ctx.getString(R.string.disk_import_copy) to { host.importDisk(t) }
         for (e in DiskImageSource.recent(ctx, t.kind).filter { t.accepts(it.name) }) {
-            items += ctx.getString(R.string.disk_direct_suffix, e.name) to { host.insertRecent(t, e) }
+            items += if (DiskImageSource.isEntryUnavailable(ctx, e)) {
+                // 今は開けないもの。タップすると開き直してみて、開けなければ「履歴から消す」を選べる
+                ctx.getString(R.string.disk_unavailable_suffix, e.name) to { host.insertRecent(t, e) }
+            } else {
+                ctx.getString(R.string.disk_direct_suffix, e.name) to { host.insertRecent(t, e) }
+            }
         }
         for (f in DiskImages.list(ctx, t.kind).filter { t.accepts(it.name) }) {
             items += f.name to { insert(t, f) }
@@ -332,7 +355,7 @@ class Np2Menu(private val ctx: Context, private val host: Host) {
         override fun onStateLoaded(slot: Int, result: Int) {
             // ステートには CD-ROM のパスも入っている。次の起動で入れ直すパスを合わせる
             if (result == Np2Native.LOAD_OK) {
-                DiskImageSource.saveCdPath(ctx, Np2Native.getHdd(Np2Native.CD_DRIVE))
+                DiskImageSource.syncCdPath(ctx, Np2Native.getHdd(Np2Native.CD_DRIVE))
                 host.onStateRestored()
             }
             toast(when (result) {
@@ -361,9 +384,14 @@ class Np2Menu(private val ctx: Context, private val host: Host) {
                 drive < 0x20 -> "HDD${drive + 1}"
                 else -> "SCSI #${drive - 0x20}"
             }
+            // 今は開けないもの (SD カードなど) は、形式や壊れの話ではないので別の文にする。
+            // 起動時のダイアログで知らせ、ユーザーが「このまま続ける」を選んだものは、重ねて出さない
+            val unavailable = DiskImageSource.isPathUnavailable(path)
+            if (unavailable && DiskImageSource.idOfPath(path) in startupUnavailableIds) return
             builder()
-                .setTitle(R.string.disk_mount_failed_title)
-                .setMessage(ctx.getString(R.string.disk_hdd_failed, File(path).name, label))
+                .setTitle(if (unavailable) R.string.disk_unavailable_now_title else R.string.disk_mount_failed_title)
+                .setMessage(ctx.getString(if (unavailable) R.string.disk_hdd_unavailable else R.string.disk_hdd_failed,
+                    File(path).name, label))
                 .setPositiveButton(R.string.ok, null)
                 .show()
         }
@@ -381,7 +409,10 @@ class Np2Menu(private val ctx: Context, private val host: Host) {
                 }
                 else -> {
                     // 失敗したときは、前の CD-ROM も取り出されている。ドライブが無いときは何も変わっていない
-                    if (result == Np2Native.CD_REJECTED) DiskImageSource.saveCdPath(ctx, null)
+                    // 今は開けない CD (SD カードなど) なら、つないで開き直せば戻るよう記録を残す
+                    if (result == Np2Native.CD_REJECTED && !DiskImageSource.isPathUnavailable(path)) {
+                        DiskImageSource.saveCdPath(ctx, null)
+                    }
                     builder()
                         .setTitle(R.string.disk_mount_failed_title)
                         .setMessage(if (result == Np2Native.CD_NO_DRIVE) ctx.getString(R.string.cd_no_drive)
@@ -405,7 +436,8 @@ class Np2Menu(private val ctx: Context, private val host: Host) {
         }
 
         override fun onStateConflict(slot: Int, info: String) {
-            val check = StateDiskCheck(info)
+            val check = StateDiskCheck(info, { DiskImageSource.isNameUnavailable(ctx, it) },
+                { DiskImageSource.isNameInHistory(ctx, it) })
             val b = builder()
                 .setTitle("${slotName(slot)} のディスクが今と異なります")
                 .setMessage(check.message("ロード"))
@@ -422,7 +454,8 @@ class Np2Menu(private val ctx: Context, private val host: Host) {
 
         override fun onResumeConflict(info: String) {
             if (resumeDialog?.isShowing == true) return
-            val check = StateDiskCheck(info)
+            val check = StateDiskCheck(info, { DiskImageSource.isNameUnavailable(ctx, it) },
+                { DiskImageSource.isNameInHistory(ctx, it) })
             val answer = { a: Int -> resumeDialog = null; Np2Native.answerResume(a) }
             val b = builder()
                 .setTitle("前回の続き (レジューム) のディスクが今と異なります")

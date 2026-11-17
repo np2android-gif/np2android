@@ -3,6 +3,9 @@ package jp.sawada.np2android
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.os.Environment
+import android.os.storage.StorageManager
+import android.provider.DocumentsContract
 import android.provider.OpenableColumns
 import android.os.ParcelFileDescriptor
 import android.system.Os
@@ -30,6 +33,9 @@ object DiskImageSource {
     private const val KEY = "entries"
     /** 永続 URI 権限には上限 (アプリごとに 128〜512) があるので、履歴はこの件数までにする */
     private const val MAX_HISTORY = 16
+    private const val AUTH_EXTERNAL = "com.android.externalstorage.documents"
+    private const val AUTH_DOWNLOADS = "com.android.providers.downloads.documents"
+    private const val AUTH_MEDIA = "com.android.providers.media.documents"
 
     data class Entry(
         val id: String,
@@ -62,7 +68,20 @@ object DiskImageSource {
         data class NotLocal(val name: String) : Result()
         /** 権限が無い・ファイルが無い */
         data class NotFound(val name: String) : Result()
+        /**
+         * 今は開けない (SD カードなどが外れている、クラウドにつながらないなど)。履歴と権限は残す。
+         * [id] は履歴のイメージならその ID (ユーザーが履歴から消せるように)
+         */
+        data class Unavailable(val name: String, val id: String? = null) : Result()
     }
+
+    /** 起動時の登録の結果 ([registerReferenced]) */
+    class Startup(
+        /** 開けなくなって履歴から外したイメージの表示名 */
+        val lost: List<String>,
+        /** 今は開けないので、履歴に残したまま登録しなかったイメージ */
+        val unavailable: List<Entry>,
+    )
 
     @Volatile private var cache: MutableList<Entry>? = null
 
@@ -189,13 +208,14 @@ object DiskImageSource {
      * これらに残った仮想パスはコアが起動直後やロード時に直接開くので、エミュレータスレッドが
      * 動き出す前 (onCreate) に呼ぶこと。それ以外の履歴は、メニューから挿入するときに登録する
      * (開きっぱなしの fd を履歴の件数だけ持たないように)。
-     * @return 開けなくなって履歴から外したイメージの表示名
+     * 今は開けないもの ([Result.Unavailable]) は、履歴と権限を残す (SD カードなどをつなげば、そのまま使える)。
      */
-    fun registerReferenced(context: Context): List<String> {
+    fun registerReferenced(context: Context): Startup {
         val referenced = referencedIds(context)
         val persisted = context.contentResolver.persistedUriPermissions
             .filter { it.isReadPermission }.map { it.uri }.toSet()
         val lost = mutableListOf<String>()
+        val unavailable = mutableListOf<Entry>()
         for (e in synchronized(this) { entries(context).toList() }) {
             if (e.uri !in persisted || (e.subUri != null && e.subUri !in persisted)) {
                 // 権限が無くなった (アプリのデータ消去など)。参照の有無にかかわらず使えない
@@ -208,11 +228,13 @@ object DiskImageSource {
             if (r is Result.NotFound) {
                 forget(context, e)
                 lost += e.name
+            } else if (r is Result.Unavailable) {
+                unavailable += e
             } else if (r !is Result.Ok) {
                 Log.w(TAG, "startup register failed: ${e.name} $r")
             }
         }
-        return lost
+        return Startup(lost, unavailable)
     }
 
     /**
@@ -271,7 +293,7 @@ object DiskImageSource {
         } catch (e: Exception) {
             Log.w(TAG, "open failed: $name (${e.javaClass.simpleName}: ${e.message})")
             null
-        } ?: return Result.NotFound(name)
+        } ?: return openFailed(context, id, uri, name)
 
         // CD-ROM は読むだけなので "r" でしか開かない
         val rw = if (kind == DiskImages.Kind.CD) null else try {
@@ -313,6 +335,7 @@ object DiskImageSource {
                 return r
             }
         }
+        synchronized(this) { unavailableIds -= id }
         return Result.Ok(Entry(id, uri, name, kind, readOnly, System.currentTimeMillis(), nonLocal = !local,
             subUri = subUri, subName = subName), path)
     }
@@ -324,7 +347,7 @@ object DiskImageSource {
         } catch (e: Exception) {
             Log.w(TAG, "open failed: $name (${e.javaClass.simpleName}: ${e.message})")
             null
-        } ?: return Result.NotFound(name)
+        } ?: return openFailed(context, id, uri, name)
         pfd.use {
             if (!isSeekableFile(it, name)) return Result.NotSeekable(name)
             if (!Np2Native.safRegisterSub(id, it.fd)) return Result.NotSeekable(name)
@@ -392,6 +415,11 @@ object DiskImageSource {
      */
     fun startupCdPath(context: Context): String? {
         val path = savedCdPath(context) ?: return null
+        // 今は開けない CD は入れに行かない (入れに行くと、C の側が外したと知らせてきて記録が消える)。記録は残す
+        if (isPathUnavailable(path)) {
+            Log.i(TAG, "startup cd unavailable now, kept: $path")
+            return null
+        }
         val ok = if (path.startsWith("saf:/")) {
             synchronized(this) { entries(context).any { path.startsWith(it.pathPrefix) } }
         } else {
@@ -399,6 +427,122 @@ object DiskImageSource {
         }
         if (!ok) saveCdPath(context, null)
         return path.takeIf { ok }
+    }
+
+    /**
+     * 前回の CD-ROM の記録を、今入っている [current] に合わせる。ただし、今 CD が入っておらず、記録されている
+     * CD が今は開けないもの (開けずに空になった) なら、記録を残す (つないで開き直せば戻るように)
+     */
+    fun syncCdPath(context: Context, current: String?) {
+        if (current.isNullOrEmpty() && isPathUnavailable(savedCdPath(context))) return
+        saveCdPath(context, current)
+    }
+
+    // ---- 今は開けないもの (Q8) -----------------------------------------------
+
+    /** このプロセスで、開こうとして「今は開けない」と分かった履歴の ID。開けたら外す。保存はしない */
+    private val unavailableIds = mutableSetOf<String>()
+
+    /** 仮想パス "saf:/<id>/<名前>" の ID。仮想パスでなければ null */
+    fun idOfPath(path: String?): String? =
+        path?.takeIf { it.startsWith("saf:/") }?.removePrefix("saf:/")?.substringBefore('/')?.takeIf { it.isNotEmpty() }
+
+    /** 仮想パス [path] のイメージを、このプロセスで「今は開けない」と分かっている */
+    @Synchronized
+    fun isPathUnavailable(path: String?): Boolean = idOfPath(path)?.let { it in unavailableIds } ?: false
+
+    /**
+     * 表示名が [name] のイメージを、このプロセスで「今は開けない」と分かっている。レジュームの確認の差分には
+     * ファイル名しか入っていない (port/np2bridge.c の addline) ので、名前で照らし合わせる。
+     * 照らし合わせる先は、開こうとして開けなかったものだけ (同じ名前の開けるイメージとは取り違えない)
+     */
+    @Synchronized
+    fun isNameUnavailable(context: Context, name: String): Boolean =
+        entries(context).any { it.id in unavailableIds && it.name == name }
+
+    /** 表示名が [name] のイメージが直接オープンの履歴にある */
+    @Synchronized
+    fun isNameInHistory(context: Context, name: String): Boolean = entries(context).any { it.name == name }
+
+    /**
+     * 履歴の一覧に「今は開けません」と出すか。開こうとして分かったもの、または開かなくても
+     * ボリュームが今つながっていないと分かるもの (SD カードなど)
+     */
+    fun isEntryUnavailable(context: Context, entry: Entry): Boolean {
+        if (synchronized(this) { entry.id in unavailableIds }) return true
+        return runCatching { volumeOf(entry.uri)?.let { !isVolumeMounted(context, it) } ?: false }.getOrDefault(false)
+    }
+
+    /** 履歴から消し、権限も手放す (今は開けないもののダイアログから) */
+    fun remove(context: Context, id: String) {
+        val e = synchronized(this) {
+            unavailableIds -= id
+            entries(context).firstOrNull { it.id == id }
+        } ?: return
+        forget(context, e)
+    }
+
+    /** 開けなかった。今は開けないだけなら [Result.Unavailable] (履歴と権限は残す)、そうでなければ [Result.NotFound] */
+    private fun openFailed(context: Context, id: String, uri: Uri, name: String): Result {
+        val unavailable = runCatching { isUnavailable(context, uri) }.getOrElse {
+            Log.w(TAG, "availability check failed: $uri", it)
+            runCatching { anyRemovableUnmounted(context) }.getOrDefault(true)
+        }
+        Log.i(TAG, "open failed: $name -> ${if (unavailable) "unavailable now (kept)" else "not found"}")
+        if (!unavailable) return Result.NotFound(name)
+        synchronized(this) { unavailableIds += id }
+        return Result.Unavailable(name, id)
+    }
+
+    /**
+     * 開けなかった [uri] が「今は開けないだけ」か。例外の種類や問い合わせの結果では削除と見分けられない
+     * (どちらも FileNotFoundException で、問い合わせも null。Q8 手順0) ので、ファイルのあるボリュームが
+     * 今つながっているかで見分ける。
+     * - 端末のストレージ (externalstorage) とダウンロードの raw: は、ドキュメント ID からボリュームを決め、
+     *   つながっていなければ「今は開けない」、つながっていれば「削除された」
+     * - ボリュームが分からないもの (ダウンロードのほかの ID、メディア、ID の形が読めないもの) は、
+     *   取り外せるボリュームが 1 つでもつながっていなければ「今は開けない」
+     * - それ以外の提供元 (クラウドなど) は常に「今は開けない」(通信切れの方がずっと起きやすい)
+     */
+    private fun isUnavailable(context: Context, uri: Uri): Boolean {
+        val authority = uri.authority
+        if (authority != AUTH_EXTERNAL && authority != AUTH_DOWNLOADS && authority != AUTH_MEDIA) return true
+        val vol = volumeOf(uri) ?: return anyRemovableUnmounted(context)
+        return !isVolumeMounted(context, vol)
+    }
+
+    /** [uri] のファイルがあるボリュームの UUID。内部 (primary) は ""、分からなければ null */
+    private fun volumeOf(uri: Uri): String? {
+        val docId = runCatching { DocumentsContract.getDocumentId(uri) }.getOrNull() ?: return null
+        return when (uri.authority) {
+            // "primary:Download/a.vhd" / "FC30-3DA9:np2test/a.vhd"
+            AUTH_EXTERNAL -> docId.substringBefore(':', "").takeIf { it.isNotEmpty() }
+                ?.let { if (it == "primary") "" else it }
+            // "raw:/storage/emulated/0/Download/a.vhd" / "raw:/storage/FC30-3DA9/a.vhd"
+            AUTH_DOWNLOADS -> docId.takeIf { it.startsWith("raw:") }?.removePrefix("raw:")?.let { volumeOfPath(it) }
+            else -> null
+        }
+    }
+
+    private fun volumeOfPath(path: String): String? {
+        if (path.startsWith("/storage/emulated/") || path.startsWith("/sdcard/")) return ""
+        if (!path.startsWith("/storage/")) return null
+        return path.removePrefix("/storage/").substringBefore('/').takeIf { it.isNotEmpty() && it != "self" }
+    }
+
+    /** ボリューム [uuid] ("" は内部) が今つながっているか。一覧に無い (抜かれたなど) ならつながっていない */
+    private fun isVolumeMounted(context: Context, uuid: String): Boolean {
+        if (uuid.isEmpty()) return true
+        val sm = context.getSystemService(StorageManager::class.java) ?: return true
+        val v = sm.storageVolumes.firstOrNull { it.uuid.equals(uuid, ignoreCase = true) } ?: return false
+        return v.state == Environment.MEDIA_MOUNTED || v.state == Environment.MEDIA_MOUNTED_READ_ONLY
+    }
+
+    private fun anyRemovableUnmounted(context: Context): Boolean {
+        val sm = context.getSystemService(StorageManager::class.java) ?: return false
+        return sm.storageVolumes.any {
+            it.isRemovable && it.state != Environment.MEDIA_MOUNTED && it.state != Environment.MEDIA_MOUNTED_READ_ONLY
+        }
     }
 
     // ---- 履歴の更新 ---------------------------------------------------------

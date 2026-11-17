@@ -73,20 +73,21 @@ class Np2Activity : SDLActivity(), KeyboardController.Actions, Np2Menu.Host, Set
         // 直接オープンの履歴のうち、np2.cfg・レジューム・ステートが参照しているものを
         // エミュレータスレッドが動き出す前に登録する (起動直後のレジュームやロードで開けるように)。
         // 見つからなかったものは、この後に出る np2 のレジュームの確認 (英語) より先にダイアログで知らせる
-        val lost = DiskImageSource.registerReferenced(this)
+        val startup = DiskImageSource.registerReferenced(this)
         // 前回の CD-ROM を起動時に入れ直す (レジュームがあれば、そちらに保存された状態が優先される)
         Np2Native.setStartupCd(DiskImageSource.startupCdPath(this))
         // ホストドライブの設定 (np2.cfg には保存しない)。np2 が設定を読んだ直後に反映される
         settings.applyHostDrv()
         // I/O ポートの見分け方 (np2.cfg には保存しない)。最初のリセットより前に反映される
         settings.applySysIoMask()
-        if (lost.isNotEmpty()) {
+        if (startup.lost.isNotEmpty()) {
             dialog()
                 .setTitle(R.string.disk_lost_title)
-                .setMessage(getString(R.string.disk_lost, lost.joinToString("\n")))
+                .setMessage(getString(R.string.disk_lost, startup.lost.joinToString("\n")))
                 .setPositiveButton(R.string.ok, null)
                 .show()
         }
+        if (startup.unavailable.isNotEmpty() && mSDLThread == null) holdForUnavailable(startup.unavailable)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             // 予測型「戻る」(targetSdk 36+ で既定) では onBackPressed が呼ばれないため、こちらで受ける
@@ -455,6 +456,7 @@ class Np2Activity : SDLActivity(), KeyboardController.Actions, Np2Menu.Host, Set
                 b.show()
             }
             is DiskImageSource.Result.NotFound -> menu.toast(getString(R.string.disk_not_found, result.name))
+            is DiskImageSource.Result.Unavailable -> menu.showUnavailable(result.name, result.id)
         }
     }
 
@@ -817,8 +819,41 @@ class Np2Activity : SDLActivity(), KeyboardController.Actions, Np2Menu.Host, Set
     // ---- 全画面 -------------------------------------------------------------
 
     override fun onWindowFocusChanged(hasFocus: Boolean) {
-        super.onWindowFocusChanged(hasFocus)
+        // 起動時の「今は開けない」の確認の答えを待つ間は SDL に知らせない (エミュレータのスレッドを始めない)
+        if (!holdStart) super.onWindowFocusChanged(hasFocus)
         if (hasFocus) hideSystemBars()
+    }
+
+    /** 起動時の「今は開けない」の確認の答えを待っている ([holdForUnavailable]) */
+    private var holdStart = false
+
+    /**
+     * 起動時に今は開けなかったイメージを知らせ、答えが出るまでエミュレータのスレッドを始めない (Q8)。
+     * スレッドは SDL が「フォーカスがある」と知ったときに始まるので ([SDLActivity.handleNativeState])、
+     * その印を下ろしておく。「終了」なら C のコードを一度も動かさずに閉じるので、レジューム (np2sdl2.sav)
+     * も np2.cfg も書かれない (空のドライブで良いレジュームを上書きしない)。
+     * SDL の Java 側の中身に頼っているので、SDL を更新したら確かめ直すこと (fdd/README-ANDROID.txt)。
+     */
+    private fun holdForUnavailable(unavailable: List<DiskImageSource.Entry>) {
+        holdStart = true
+        mHasFocus = false
+        menu.startupUnavailableIds = unavailable.map { it.id }.toSet()
+        Log.i(TAG, "startup held: unavailable ${unavailable.map { it.name }}")
+        dialog()
+            .setTitle(R.string.disk_unavailable_title)
+            .setMessage(getString(R.string.disk_unavailable, unavailable.joinToString("\n") { it.name }))
+            .setCancelable(false)
+            .setNegativeButton(R.string.disk_unavailable_continue) { _, _ ->
+                Log.i(TAG, "startup: continue without unavailable disks")
+                holdStart = false
+                // ダイアログが閉じてフォーカスが戻ると SDL がスレッドを始める。もう戻っていたらここで知らせる
+                mLayout?.post { if (!holdStart && mSDLThread == null && hasWindowFocus()) onWindowFocusChanged(true) }
+            }
+            .setPositiveButton(R.string.disk_unavailable_exit) { _, _ ->
+                Log.i(TAG, "startup: exit without saving")
+                finish()
+            }
+            .show()
     }
 
     /** ステータスバー/ナビゲーションバーを隠す（スワイプで一時表示）。 */

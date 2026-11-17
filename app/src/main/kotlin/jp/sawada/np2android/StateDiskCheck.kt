@@ -6,7 +6,13 @@ package jp.sawada.np2android
  * 名前は np2 の statsave.c の名前 (FDD1〜 / SASI1〜 / SCSI0〜)。種類は
  * updated (セーブ後に書き換えられた) / notfound (見つからない) / change (ロードで切り替わる) / gone (ロードで外れる)。
  */
-class StateDiskCheck(info: String) {
+class StateDiskCheck(
+    info: String,
+    /** 表示名のイメージが今は開けない (SD カードなど。[DiskImageSource.isNameUnavailable]) */
+    private val isUnavailable: (String) -> Boolean = { false },
+    /** 表示名のイメージが直接オープンの履歴にある (外れても履歴から入れ直せる) */
+    private val inHistory: (String) -> Boolean = { false },
+) {
 
     private class Line(val label: String, val kind: String, val saved: String, val now: String)
 
@@ -25,8 +31,14 @@ class StateDiskCheck(info: String) {
             sb.append("・").append(l.label).append(": ").append(
                 when (l.kind) {
                     "updated" -> "${l.saved} はセーブのあとで書き換えられています"
-                    "notfound" -> "${l.saved} が見つかりません。${loadWord}すると、このドライブは空になります"
-                    "gone" -> "${loadWord}すると、今の ${l.now} は外れます (セーブ時はつながっていません)"
+                    "notfound" -> if (isUnavailable(l.saved)) {
+                        "${l.saved} は SD カードなどにあり、今は開けません。${loadWord}すると、このドライブは空になり、" +
+                                "次の前回の続きにも空で記録されます"
+                    } else {
+                        "${l.saved} が見つかりません。${loadWord}すると、このドライブは空になります"
+                    }
+                    "gone" -> "${loadWord}すると、今の ${l.now} は外れます (セーブ時はつながっていません)" +
+                            if (inHistory(l.now)) "。後でメニューの履歴から入れ直せます" else ""
                     else -> "${loadWord}すると、${l.now.ifEmpty { "(なし)" }} から ${l.saved} に切り替わります"
                 }
             ).append('\n')
@@ -37,7 +49,16 @@ class StateDiskCheck(info: String) {
         } else {
             sb.append("\n${loadWord}すると、HDD の設定もセーブ時のディスクに合わせて変わります。")
         }
-        if (lines.any { it.kind == "notfound" }) {
+        val notFound = lines.filter { it.kind == "notfound" }
+        if (notFound.any { isUnavailable(it.saved) }) {
+            sb.append(if (loadWord == "レジューム") {
+                "\n\n今は開けないディスクは、SD カードなどをつないでから、アプリを開き直してください (「終了」を選ぶと、" +
+                        "何も保存せずに閉じます)。"
+            } else {
+                "\n\n今は開けないディスクは、SD カードなどをつないでから${loadWord}してください。"
+            })
+        }
+        if (notFound.any { !isUnavailable(it.saved) }) {
             sb.append("\n\n見つからないディスクは、${loadWord}後にメニューの「端末のファイルを直接開く」で選び直してください。")
         }
         return sb.toString()
