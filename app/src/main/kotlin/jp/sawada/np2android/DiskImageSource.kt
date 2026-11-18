@@ -15,6 +15,7 @@ import android.util.Log
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.FileNotFoundException
+import java.util.Locale
 import java.util.UUID
 
 /**
@@ -50,6 +51,12 @@ object DiskImageSource {
         /** .cue・.ccd・.cdm・.mds が使う本体 (.bin・.img・.mdf。CD-ROM のみ)。同じ ID に読み取り専用で付ける */
         val subUri: Uri? = null,
         val subName: String? = null,
+        /**
+         * 最後に開けたときに、実体があったボリューム (fd の実体のパスから決めた UUID の大文字。内部は "")。
+         * 分からなかった (クラウドなど) か、a16 以前の履歴でまだ開いていなければ null。
+         * 開けなかったときに「今は開けない」と「削除された」を分けるのに使う (Q9 課題 A)
+         */
+        val vol: String? = null,
     ) {
         /** 登録済みならこの接頭辞の仮想パスになっている */
         val pathPrefix get() = "saf:/$id/"
@@ -108,6 +115,8 @@ object DiskImageSource {
                         nonLocal = o.optBoolean("nl"),
                         subUri = o.optString("sub").takeIf { it.isNotEmpty() }?.let { Uri.parse(it) },
                         subName = o.optString("subname").takeIf { it.isNotEmpty() },
+                        // a17 で足した任意の項目。a16 は読まずに捨てる (a16 で保存すると消え、次に開けたときに戻る)
+                        vol = if (o.has("vol")) o.optString("vol") else null,
                     )
                 }
             }.onFailure { Log.e(TAG, "history broken", it) }
@@ -129,7 +138,8 @@ object DiskImageSource {
                 .put("used", e.lastUsed)
                 .put("nl", e.nonLocal)
                 .put("sub", e.subUri?.toString() ?: "")
-                .put("subname", e.subName ?: ""))
+                .put("subname", e.subName ?: "")
+                .apply { if (e.vol != null) put("vol", e.vol) })
         }
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY, a.toString()).apply()
     }
@@ -226,7 +236,10 @@ object DiskImageSource {
             }
             if (e.id !in referenced) continue
             val r = register(context, e.id, e.uri, e.name, e.kind, e.nonLocal, e.subUri, e.subName)
-            if (r is Result.NotFound) {
+            if (r is Result.Ok) {
+                // 起動時は remember しない (使った時刻は変えない) が、ボリュームの記録は今の実体に合わせる
+                if (r.entry.vol != e.vol) updateVol(context, e.id, r.entry.vol)
+            } else if (r is Result.NotFound) {
                 forget(context, e)
                 lost += e.name
             } else if (r is Result.Unavailable) {
@@ -344,7 +357,9 @@ object DiskImageSource {
             probe.close()
             return Result.NotSeekable(name)
         }
-        val local = isLocalStorage((rw ?: probe).fd, name)
+        val real = realPathOf((rw ?: probe).fd)
+        val local = isLocalStorage(real, name)
+        val vol = if (local) real?.let { volumeOfPath(it) } else null
         // CD-ROM は書き込まないので、端末のストレージに無くても確認なしで開く
         if (!local && !allowNonLocal && kind != DiskImages.Kind.CD) {
             rw?.close()
@@ -357,7 +372,7 @@ object DiskImageSource {
 
         val path = pfd.use { Np2Native.safRegister(id, name, it.fd, readOnly) }
             ?: return Result.NotSeekable(name)
-        Log.i(TAG, "opened $uri as $path ro=$readOnly local=$local")
+        Log.i(TAG, "opened $uri as $path ro=$readOnly local=$local vol=$vol")
         if (subUri != null) {
             val r = registerSub(context, id, subUri, subName ?: "bin")
             if (r != null) {
@@ -367,7 +382,7 @@ object DiskImageSource {
         }
         synchronized(this) { unavailableIds -= id }
         return Result.Ok(Entry(id, uri, name, kind, readOnly, System.currentTimeMillis(), nonLocal = !local,
-            subUri = subUri, subName = subName), path)
+            subUri = subUri, subName = subName, vol = vol), path)
     }
 
     /** 目次ファイルが使う本体を読み取り専用で開いて [id] に付ける。失敗したらその結果を返す */
@@ -392,12 +407,14 @@ object DiskImageSource {
      * 返すことがある。シークできるので仮想パスとしては開けてしまうが、書き込みが元の場所に戻らない。
      * 実体のパスはプロバイダーごとに決まっていないため、端末のストレージのパスかどうかで判断する。
      */
-    private fun isLocalStorage(fd: Int, name: String): Boolean {
-        val real = runCatching { Os.readlink("/proc/self/fd/$fd") }.getOrNull()
+    private fun isLocalStorage(real: String?, name: String): Boolean {
         val local = real != null && LOCAL_PREFIXES.any { real.startsWith(it) }
         Log.i(TAG, "fd of $name -> $real (${if (local) "local" else "not local"})")
         return local
     }
+
+    /** fd の実体のパス (/proc/self/fd のリンク先)。読めなければ null */
+    private fun realPathOf(fd: Int): String? = runCatching { Os.readlink("/proc/self/fd/$fd") }.getOrNull()
 
     /** 通常ファイルでランダムアクセスできるか (クラウド系などはパイプを返すことがある) */
     private fun isSeekableFile(pfd: ParcelFileDescriptor, name: String): Boolean {
@@ -500,7 +517,9 @@ object DiskImageSource {
      */
     fun isEntryUnavailable(context: Context, entry: Entry): Boolean {
         if (synchronized(this) { entry.id in unavailableIds }) return true
-        return runCatching { volumeOf(entry.uri)?.let { !isVolumeMounted(context, it) } ?: false }.getOrDefault(false)
+        // URI から分からないもの (msf: など) は、最後に開けたときに記録したボリュームで見る (Q9 課題 A)
+        return runCatching { (volumeOf(entry.uri) ?: entry.vol)?.let { !isVolumeMounted(context, it) } ?: false }
+            .getOrDefault(false)
     }
 
     /** 履歴から消し、権限も手放す (今は開けないもののダイアログから) */
@@ -514,7 +533,8 @@ object DiskImageSource {
 
     /** 開けなかった。今は開けないだけなら [Result.Unavailable] (履歴と権限は残す)、そうでなければ [Result.NotFound] */
     private fun openFailed(context: Context, id: String, uri: Uri, name: String): Result {
-        val unavailable = runCatching { isUnavailable(context, uri) }.getOrElse {
+        val recorded = synchronized(this) { entries(context).firstOrNull { it.id == id }?.vol }
+        val unavailable = runCatching { isUnavailable(context, uri, recorded) }.getOrElse {
             Log.w(TAG, "availability check failed: $uri", it)
             runCatching { anyRemovableUnmounted(context) }.getOrDefault(true)
         }
@@ -530,14 +550,17 @@ object DiskImageSource {
      * 今つながっているかで見分ける。
      * - 端末のストレージ (externalstorage) とダウンロードの raw: は、ドキュメント ID からボリュームを決め、
      *   つながっていなければ「今は開けない」、つながっていれば「削除された」
-     * - ボリュームが分からないもの (ダウンロードのほかの ID、メディア、ID の形が読めないもの) は、
-     *   取り外せるボリュームが 1 つでもつながっていなければ「今は開けない」
+     * - ID からボリュームが分からないもの (ダウンロードの msf: など、メディア、ID の形が読めないもの) は、
+     *   最後に開けたときに記録したボリューム [recordedVol] で同じように決める (Q9 課題 A。SD カードを
+     *   抜くとボリュームが一覧から消えるので、記録が無いと「取り外せるボリュームが外れている」が分からない)
+     * - 記録も無いもの (a16 以前の履歴で、まだ開けていない) は、取り外せるボリュームが 1 つでも
+     *   つながっていなければ「今は開けない」
      * - それ以外の提供元 (クラウドなど) は常に「今は開けない」(通信切れの方がずっと起きやすい)
      */
-    private fun isUnavailable(context: Context, uri: Uri): Boolean {
+    private fun isUnavailable(context: Context, uri: Uri, recordedVol: String?): Boolean {
         val authority = uri.authority
         if (authority != AUTH_EXTERNAL && authority != AUTH_DOWNLOADS && authority != AUTH_MEDIA) return true
-        val vol = volumeOf(uri) ?: return anyRemovableUnmounted(context)
+        val vol = volumeOf(uri) ?: recordedVol ?: return anyRemovableUnmounted(context)
         return !isVolumeMounted(context, vol)
     }
 
@@ -554,10 +577,36 @@ object DiskImageSource {
         }
     }
 
+    /**
+     * パスのあるボリューム。内部は ""、取り外せるものは UUID の大文字、分からなければ null。
+     * - 内部："/storage/emulated/<ユーザー>/…"、"/sdcard/…"、"/data/media/…" (fd の実体がこうなる端末がある)
+     * - 取り外せるもの："/storage/<UUID>/…" (ダウンロードの raw: と msf: の fd)、
+     *   "/mnt/media_rw/<UUID>/…" (Android 10 の externalstorage の fd。Q9 手順0)
+     */
     private fun volumeOfPath(path: String): String? {
-        if (path.startsWith("/storage/emulated/") || path.startsWith("/sdcard/")) return ""
-        if (!path.startsWith("/storage/")) return null
-        return path.removePrefix("/storage/").substringBefore('/').takeIf { it.isNotEmpty() && it != "self" }
+        if (path.startsWith("/storage/emulated/") || path.startsWith("/sdcard/") || path.startsWith("/data/media/")) {
+            return ""
+        }
+        val rest = when {
+            path.startsWith("/storage/") -> path.removePrefix("/storage/")
+            path.startsWith("/mnt/media_rw/") -> path.removePrefix("/mnt/media_rw/")
+            else -> return null
+        }
+        // 区切りが無い (ボリュームの直下でない) ものや "self" は分からない扱い
+        if (!rest.contains('/')) return null
+        return rest.substringBefore('/').takeIf { it.isNotEmpty() && it != "self" }?.uppercase(Locale.ROOT)
+    }
+
+    /** 履歴の [id] のボリュームの記録を [vol] にする */
+    private fun updateVol(context: Context, id: String, vol: String?) {
+        synchronized(this) {
+            val list = entries(context)
+            val i = list.indexOfFirst { it.id == id }
+            if (i < 0) return
+            list[i] = list[i].copy(vol = vol)
+            save(context)
+        }
+        Log.i(TAG, "volume of $id recorded: $vol")
     }
 
     /** ボリューム [uuid] ("" は内部) が今つながっているか。一覧に無い (抜かれたなど) ならつながっていない */
