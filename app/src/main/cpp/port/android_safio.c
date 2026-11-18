@@ -113,6 +113,31 @@ BOOL safio_isvirtual(const char *path)
 	return ((path != NULL) && (strncmp(path, SAFIO_PREFIX, sizeof(SAFIO_PREFIX) - 1) == 0)) ? TRUE : FALSE;
 }
 
+void safio_getid(const char *path, char *id, int size)
+{
+	const char *p;
+	size_t len;
+
+	if (size <= 0) {
+		return;
+	}
+	id[0] = '\0';
+	if (!safio_isvirtual(path)) {
+		return;
+	}
+	path += sizeof(SAFIO_PREFIX) - 1;
+	p = strchr(path, '/');
+	if (p == NULL) {
+		return;
+	}
+	len = (size_t)(p - path);
+	if ((len == 0) || (len >= SAFIO_IDLEN) || (len >= (size_t)size)) {
+		return;
+	}
+	memcpy(id, path, len);
+	id[len] = '\0';
+}
+
 static BOOL valid_id(const char *id)
 {
 	size_t len;

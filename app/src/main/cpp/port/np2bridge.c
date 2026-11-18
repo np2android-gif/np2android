@@ -649,13 +649,34 @@ static BOOL ishdd(REG8 drv)
 	return (drv == 0x00) || (drv == 0x01) || (drv >= 0x20);
 }
 
+/*
+ * ANDROID-SAF: info に 1 行足す。"名前\t種類\tセーブ時の名前\t今の名前\tセーブ時の ID\t今の ID\n"。
+ * ID は仮想パス (saf:/<id>/…) の <id> で、仮想パスでなければ空。Kotlin は ID で照らし合わせ、
+ * 無ければ名前で照らす (同じ名前の別のイメージと取り違えないため。Q9 課題 B)。
+ * 1 行は名前 2 つ (MAX_PATH まで) と ID 2 つが入る大きさ。info に収まらない行は丸ごと落とす
+ * (途中で切ると Kotlin が列を読み違える)
+ */
+#define CHECKLINE_SIZE	(MAX_PATH * 2 + 128)
+
 static void addline(char *info, int size, const char *dv, const char *kind, const char *saved, const char *now)
 {
-	char line[300];
+	char line[CHECKLINE_SIZE];
+	char savedid[48];
+	char nowid[48];
+	size_t used;
+	size_t len;
 
-	SDL_snprintf(line, sizeof(line), "%s\t%s\t%s\t%s\n", dv, kind,
-				 (saved[0]) ? file_getname(saved) : "", (now[0]) ? file_getname(now) : "");
-	SDL_strlcat(info, line, size);
+	safio_getid(saved, savedid, sizeof(savedid));
+	safio_getid(now, nowid, sizeof(nowid));
+	SDL_snprintf(line, sizeof(line), "%s\t%s\t%s\t%s\t%s\t%s\n", dv, kind,
+				 (saved[0]) ? file_getname(saved) : "", (now[0]) ? file_getname(now) : "", savedid, nowid);
+	used = SDL_strlen(info);
+	len = SDL_strlen(line);
+	if ((len == 0) || (line[len - 1] != '\n') || (used + len >= (size_t)size)) {
+		__android_log_print(ANDROID_LOG_WARN, LOG_TAG, "state check: line dropped (%s %s)", dv, kind);
+		return;
+	}
+	SDL_memcpy(info + used, line, len + 1);
 }
 
 /*
@@ -663,7 +684,7 @@ static void addline(char *info, int size, const char *dv, const char *kind, cons
  * あれば CHECK_CONFLICT を足す (セーブ後に書き換えられた・見つからない HDD などがある、または
  * HDD が今つながっているものと違う)。info には違いを 1 行ずつ "名前\t種類\tセーブ時\t今\n" で入れる。
  * 種類: updated (書き換えられた) / notfound (見つからない) / change (ロードで切り替わる) /
- *       gone (ロードで外れる)。ファイル名だけを入れる (表示用)
+ *       gone (ロードで外れる)。名前はファイル名だけ (表示用)。ANDROID-SAF: 行の後ろに ID の列が 2 つ付く (addline)
  */
 static int checkdisks(const char *path, char *info, int size)
 {
@@ -799,10 +820,21 @@ static void statesave(int slot)
 	notify(EV_STATE_SAVED, slot, ret ? 1 : 0, NULL);
 }
 
+/*
+ * ANDROID-SAF: checkdisks の結果の入れ物。行は最大で DISKCHECK_MAX 行と、外れる sxsi のドライブの行
+ * (SASI 4 台と SCSI 4 台) で、どれも CHECKLINE_SIZE に収まる。スタックに置かないよう static にする。
+ * ロード用 (stateload: エミュレータのスレッドの np2bridge_handle から) とレジューム用
+ * (np2bridge_resume: エミュレータのスレッドの起動処理 np2.c から) は、今は同じスレッドだが、
+ * 呼ばれ方が変わっても混ざらないよう別々に持つ
+ */
+#define CHECKINFO_SIZE	((DISKCHECK_MAX + 8) * CHECKLINE_SIZE)
+static char s_loadinfo[CHECKINFO_SIZE];
+static char s_resumeinfo[CHECKINFO_SIZE];
+
 static void stateload(int slot, BOOL force)
 {
 	char path[MAX_PATH];
-	char info[1024];
+	char *info = s_loadinfo;
 	int ret;
 
 	statefilename(path, sizeof(path), slot);
@@ -810,7 +842,7 @@ static void stateload(int slot, BOOL force)
 		notify(EV_STATE_LOADED, slot, 2, NULL);
 		return;
 	}
-	ret = checkdisks(path, info, sizeof(info));
+	ret = checkdisks(path, info, sizeof(s_loadinfo));
 	if (ret & (~(STATFLAG_DISKCHG | CHECK_CONFLICT))) {
 		__android_log_print(ANDROID_LOG_WARN, LOG_TAG, "state load slot %d: incompatible (%d)", slot, ret);
 		notify(EV_STATE_LOADED, slot, 1, NULL);
@@ -837,7 +869,7 @@ JNIEXPORT void JNICALL Java_jp_sawada_np2android_Np2Native_nativeAnswerResume(JN
 
 BOOL np2bridge_resume(const char *path)
 {
-	char info[1024];
+	char *info = s_resumeinfo;
 	int ret;
 	int answer;
 	SDL_Event e;
@@ -845,7 +877,7 @@ BOOL np2bridge_resume(const char *path)
 	if (file_attr(path) == -1) {
 		return FALSE;		/* 初回起動など */
 	}
-	ret = checkdisks(path, info, sizeof(info));
+	ret = checkdisks(path, info, sizeof(s_resumeinfo));
 	if (ret & (~(STATFLAG_DISKCHG | CHECK_CONFLICT))) {
 		__android_log_print(ANDROID_LOG_WARN, LOG_TAG, "resume: incompatible (%d)", ret);
 		notify(EV_RESUME, 0, 1, NULL);

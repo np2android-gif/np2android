@@ -499,17 +499,20 @@ object DiskImageSource {
     fun isPathUnavailable(path: String?): Boolean = idOfPath(path)?.let { it in unavailableIds } ?: false
 
     /**
-     * 表示名が [name] のイメージを、このプロセスで「今は開けない」と分かっている。レジュームの確認の差分には
-     * ファイル名しか入っていない (port/np2bridge.c の addline) ので、名前で照らし合わせる。
-     * 照らし合わせる先は、開こうとして開けなかったものだけ (同じ名前の開けるイメージとは取り違えない)
+     * レジュームの確認の 1 行のイメージを、このプロセスで「今は開けない」と分かっている。
+     * 差分の行に ID (port/np2bridge.c の addline) があれば ID で照らす (Q9 課題 B)。
+     * 無ければ (仮想パスでない) 表示名 [name] で照らす。照らし合わせる先は、開こうとして開けなかったものだけ
      */
     @Synchronized
-    fun isNameUnavailable(context: Context, name: String): Boolean =
-        entries(context).any { it.id in unavailableIds && it.name == name }
+    fun isDiskUnavailable(context: Context, id: String?, name: String): Boolean =
+        if (id != null) id in unavailableIds
+        else entries(context).any { it.id in unavailableIds && it.name == name }
 
-    /** 表示名が [name] のイメージが直接オープンの履歴にある */
+    /** レジュームの確認の 1 行のイメージが直接オープンの履歴にある。ID があれば ID で、無ければ表示名で照らす */
     @Synchronized
-    fun isNameInHistory(context: Context, name: String): Boolean = entries(context).any { it.name == name }
+    fun isDiskInHistory(context: Context, id: String?, name: String): Boolean =
+        if (id != null) entries(context).any { it.id == id }
+        else entries(context).any { it.name == name }
 
     /**
      * 履歴の一覧に「今は開けません」と出すか。開こうとして分かったもの、または開かなくても

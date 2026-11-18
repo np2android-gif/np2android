@@ -26,6 +26,13 @@ extern "C" {
 BOOL safio_isvirtual(const char *path);
 
 /**
+ * 仮想パス "saf:/<id>/<表示名>" の <id> を取り出す (登録されているかどうかは見ない)。
+ * 仮想パスでないか、形が合わないか、id に収まらなければ "" にする。
+ * レジュームの確認で、同じ名前の別のイメージと取り違えないために使う (Q9)
+ */
+void safio_getid(const char *path, char *id, int size);
+
+/**
  * fd を登録する。fd は dup して保持するので、呼び出し側は自分の fd を閉じてよい。
  * 同じ ID がすでにあれば置き換える (古い fd は閉じる)。
  * @param[in] id		固定の ID (英数字、'-'、'_' のみ)

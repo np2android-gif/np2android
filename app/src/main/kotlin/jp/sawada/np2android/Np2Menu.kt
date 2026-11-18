@@ -436,8 +436,8 @@ class Np2Menu(private val ctx: Context, private val host: Host) {
         }
 
         override fun onStateConflict(slot: Int, info: String) {
-            val check = StateDiskCheck(info, { DiskImageSource.isNameUnavailable(ctx, it) },
-                { DiskImageSource.isNameInHistory(ctx, it) })
+            val check = StateDiskCheck(info, { id, name -> DiskImageSource.isDiskUnavailable(ctx, id, name) },
+                { id, name -> DiskImageSource.isDiskInHistory(ctx, id, name) })
             val b = builder()
                 .setTitle("${slotName(slot)} のディスクが今と異なります")
                 .setMessage(check.message("ロード"))
@@ -454,8 +454,8 @@ class Np2Menu(private val ctx: Context, private val host: Host) {
 
         override fun onResumeConflict(info: String) {
             if (resumeDialog?.isShowing == true) return
-            val check = StateDiskCheck(info, { DiskImageSource.isNameUnavailable(ctx, it) },
-                { DiskImageSource.isNameInHistory(ctx, it) })
+            val check = StateDiskCheck(info, { id, name -> DiskImageSource.isDiskUnavailable(ctx, id, name) },
+                { id, name -> DiskImageSource.isDiskInHistory(ctx, id, name) })
             val answer = { a: Int -> resumeDialog = null; Np2Native.answerResume(a) }
             val b = builder()
                 .setTitle("前回の続き (レジューム) のディスクが今と異なります")
