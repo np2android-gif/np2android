@@ -359,6 +359,13 @@ object DiskImageSource {
             return Result.NotSeekable(name)
         }
         val real = realPathOf((rw ?: probe).fd)
+        if (real != null && isTrashed(real)) {
+            // 端末のごみ箱に移ったもの。開かずに、削除されたものとして履歴から外す (Q9)
+            rw?.close()
+            probe.close()
+            Log.i(TAG, "open failed: $name -> in the trash, not found")
+            return Result.NotFound(name)
+        }
         val local = isLocalStorage(real, name)
         val vol = if (local) real?.let { volumeOfPath(it) } else null
         // CD-ROM は書き込まないので、端末のストレージに無くても確認なしで開く
@@ -510,17 +517,40 @@ object DiskImageSource {
     }
 
     /**
-     * 同じファイルの別の見え方を 1 つにそろえる。Android 10 では externalstorage の fd が
-     * /mnt/media_rw/<UUID>/…、ダウンロードの fd が /storage/<UUID>/… になる (Q9 手順0)。
-     * 内部は /storage/emulated/<ユーザー>/… にそろえる
+     * 同じファイルの別の見え方を「/storage/…」の形に 1 つにそろえる (内部は /storage/emulated/<ユーザー>/…)。
+     * - Android 10 (XZ3)：externalstorage の fd が /mnt/media_rw/<UUID>/…、ダウンロードの fd が /storage/<UUID>/…
+     * - Android 11 以降 (Pixel 9a)：ダウンロードの msf: の fd が /mnt/user/<ユーザー>/emulated/<ユーザー>/…、
+     *   externalstorage の fd が /storage/emulated/<ユーザー>/… (Q9 8章)。同じ形の /mnt/pass_through・
+     *   /mnt/installer・/mnt/androidwritable も同じに扱う (新しい Android のストレージの見せ方)
      */
-    private fun normalizeRealPath(p: String): String = when {
-        p.startsWith("/mnt/media_rw/") -> "/storage/" + p.removePrefix("/mnt/media_rw/")
-        p.startsWith("/data/media/") -> "/storage/emulated/" + p.removePrefix("/data/media/")
-        p.startsWith("/storage/self/primary/") -> "/storage/emulated/0/" + p.removePrefix("/storage/self/primary/")
-        p.startsWith("/sdcard/") -> "/storage/emulated/0/" + p.removePrefix("/sdcard/")
-        else -> p
+    private fun normalizeRealPath(path: String): String {
+        var p = path
+        for (head in MNT_VIEWS) {
+            if (!p.startsWith(head)) continue
+            // "/mnt/user/0/" の "0/" (ユーザー番号) まで落とす
+            val rest = p.removePrefix(head)
+            val user = rest.substringBefore('/', "")
+            if (user.isNotEmpty() && user.all { it.isDigit() }) p = "/storage/" + rest.substringAfter('/')
+            break
+        }
+        return when {
+            p.startsWith("/mnt/media_rw/") -> "/storage/" + p.removePrefix("/mnt/media_rw/")
+            p.startsWith("/data/media/") -> "/storage/emulated/" + p.removePrefix("/data/media/")
+            p.startsWith("/storage/self/primary/") -> "/storage/emulated/0/" + p.removePrefix("/storage/self/primary/")
+            p.startsWith("/sdcard/") -> "/storage/emulated/0/" + p.removePrefix("/sdcard/")
+            else -> p
+        }
     }
+
+    /** 新しい Android のストレージの見せ方。この後に "<ユーザー番号>/<ボリューム>/…" が続く */
+    private val MNT_VIEWS = listOf("/mnt/user/", "/mnt/pass_through/", "/mnt/installer/", "/mnt/androidwritable/")
+
+    /**
+     * 実体がごみ箱の中にある (Android 11 以降、削除したファイルは .trash-storage の「.trashed-…」に移り、
+     * msf: の URI ではしばらく開けてしまう。Q9 8章)。書いても後で端末が消すので、削除されたものとして扱う
+     */
+    private fun isTrashed(real: String): Boolean =
+        real.contains("/.trash-storage/") || real.substringAfterLast('/').startsWith(".trashed-")
 
     // ---- 今は開けないもの (Q8) -----------------------------------------------
 
@@ -619,17 +649,15 @@ object DiskImageSource {
 
     /**
      * パスのあるボリューム。内部は ""、取り外せるものは UUID の大文字、分からなければ null。
-     * - 内部："/storage/emulated/<ユーザー>/…"、"/sdcard/…"、"/data/media/…" (fd の実体がこうなる端末がある)
-     * - 取り外せるもの："/storage/<UUID>/…" (ダウンロードの raw: と msf: の fd)、
-     *   "/mnt/media_rw/<UUID>/…" (Android 10 の externalstorage の fd。Q9 手順0)
+     * パスは [normalizeRealPath] で「/storage/…」にそろえてから見る。
+     * - 内部："/storage/emulated/<ユーザー>/…" (もとは /sdcard/、/data/media/、/mnt/user/<n>/emulated/ など)
+     * - 取り外せるもの："/storage/<UUID>/…" (もとは /mnt/media_rw/<UUID>/、/mnt/user/<n>/<UUID>/ など)
      */
-    private fun volumeOfPath(path: String): String? {
-        if (path.startsWith("/storage/emulated/") || path.startsWith("/sdcard/") || path.startsWith("/data/media/")) {
-            return ""
-        }
+    private fun volumeOfPath(original: String): String? {
+        val path = normalizeRealPath(original)
+        if (path.startsWith("/storage/emulated/")) return ""
         val rest = when {
             path.startsWith("/storage/") -> path.removePrefix("/storage/")
-            path.startsWith("/mnt/media_rw/") -> path.removePrefix("/mnt/media_rw/")
             else -> return null
         }
         // 区切りが無い (ボリュームの直下でない) ものや "self" は分からない扱い
