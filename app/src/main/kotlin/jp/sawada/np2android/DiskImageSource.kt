@@ -14,6 +14,7 @@ import android.system.OsConstants
 import android.util.Log
 import org.json.JSONArray
 import org.json.JSONObject
+import java.io.File
 import java.io.FileNotFoundException
 import java.util.Locale
 import java.util.UUID
@@ -380,7 +381,10 @@ object DiskImageSource {
                 return r
             }
         }
-        synchronized(this) { unavailableIds -= id }
+        synchronized(this) {
+            unavailableIds -= id
+            if (real != null) realPaths[id] = normalizeRealPath(real) else realPaths -= id
+        }
         return Result.Ok(Entry(id, uri, name, kind, readOnly, System.currentTimeMillis(), nonLocal = !local,
             subUri = subUri, subName = subName, vol = vol), path)
     }
@@ -483,6 +487,39 @@ object DiskImageSource {
     fun syncCdPath(context: Context, current: String?) {
         if (current.isNullOrEmpty() && isPathUnavailable(savedCdPath(context))) return
         saveCdPath(context, current)
+    }
+
+    // ---- 同じファイルの二重の挿入 (Q9) --------------------------------------
+
+    /**
+     * このプロセスで登録した ID ごとの、fd の実体のパス ([normalizeRealPath] 済み)。
+     * 同じファイルでも、選ぶ入口によって URI (つまり履歴の ID) が違うことがある (ダウンロードの msf: と
+     * externalstorage など。Q9 手順0) ので、二重の挿入は実体のパスでも調べる。
+     */
+    private val realPaths = mutableMapOf<String, String>()
+
+    /**
+     * ディスクの [path] (仮想パスか、作業フォルダのファイルの絶対パス) の実体の正規化したパス。
+     * 仮想パスで、このプロセスでまだ登録していないものや、実体が分からないものは null
+     */
+    fun realPathOfDisk(path: String): String? {
+        val id = idOfPath(path)
+        if (id != null) return synchronized(this) { realPaths[id] }
+        if (path.startsWith("saf:/")) return null
+        return runCatching { normalizeRealPath(File(path).canonicalPath) }.getOrNull()
+    }
+
+    /**
+     * 同じファイルの別の見え方を 1 つにそろえる。Android 10 では externalstorage の fd が
+     * /mnt/media_rw/<UUID>/…、ダウンロードの fd が /storage/<UUID>/… になる (Q9 手順0)。
+     * 内部は /storage/emulated/<ユーザー>/… にそろえる
+     */
+    private fun normalizeRealPath(p: String): String = when {
+        p.startsWith("/mnt/media_rw/") -> "/storage/" + p.removePrefix("/mnt/media_rw/")
+        p.startsWith("/data/media/") -> "/storage/emulated/" + p.removePrefix("/data/media/")
+        p.startsWith("/storage/self/primary/") -> "/storage/emulated/0/" + p.removePrefix("/storage/self/primary/")
+        p.startsWith("/sdcard/") -> "/storage/emulated/0/" + p.removePrefix("/sdcard/")
+        else -> p
     }
 
     // ---- 今は開けないもの (Q8) -----------------------------------------------

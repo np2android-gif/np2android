@@ -236,14 +236,19 @@ class Np2Menu(private val ctx: Context, private val host: Host) {
      * 同じイメージを2つのドライブに入れると、ドライブごとにメモリに持つ D88 のヘッダーや
      * HDD の FILE* のバッファが食い違ってイメージが壊れるため、二重マウントは禁止する。
      * HDD は np2.cfg の設定 (リセット後に開くもの) で調べる。
+     * 同じファイルでも選ぶ入口で URI が違う (仮想パスが違う) ことがあるので、書き込むドライブ (FDD・HDD) の
+     * 間では実体のパスでも比べる (Q9)。CD-ROM は読むだけなので、仮想パスが同じときだけ止める (今までどおり)。
      */
     private fun usedByOtherDrive(t: DiskTarget, path: String): String? {
         val drives = (0..3).map { DiskTarget(DiskImages.Kind.FDD, it, "FDD${it + 1}") } +
                 listOf(hdd1, hdd2, cd) + scsi
+        val real = if (t.kind != DiskImages.Kind.CD) DiskImageSource.realPathOfDisk(path) else null
         for (d in drives) {
             if (d.kind == t.kind && d.drive == t.drive) continue
             val p = if (d.kind == DiskImages.Kind.FDD) Np2Native.getFdd(d.drive) else Np2Native.getHdd(d.drive)
+            if (p.isNullOrEmpty()) continue
             if (p == path) return d.label
+            if (real != null && d.kind != DiskImages.Kind.CD && DiskImageSource.realPathOfDisk(p) == real) return d.label
         }
         return null
     }
