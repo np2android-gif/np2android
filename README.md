@@ -65,7 +65,7 @@ FDD・HDD・CD-ROM のイメージの処理には **NP2kai** のコードを取�
 
 イメージの入れ方は2通りです。
 
-- **端末のファイルを直接開く**: 端末のファイル（ダウンロードフォルダなど）をそのまま使います。書き込みも元のファイルに反映されます。一度開いたものはメニューの履歴に残ります。SD カードが外れているなど今は開けないものは、履歴に「今は開けません」と出ます（タップすると履歴から消すこともできます）。SD カード上のイメージは、ファイルを選ぶ画面の「SD カード」から選んでください（「ダウンロード」などの一覧から選ぶと、カードを抜いたまま起動したときに履歴から消えることがあります）。
+- **端末のファイルを直接開く**: 端末のファイル（ダウンロードフォルダなど）をそのまま使います。書き込みも元のファイルに反映されます。一度開いたものはメニューの履歴に残ります。SD カードが外れているなど今は開けないものは、履歴に「今は開けません」と出ます（タップすると履歴から消すこともできます）。同じファイルを 2 つのドライブに入れることはできません（ファイルを選ぶ画面の「SD カード」と「ダウンロード」のように、選ぶ場所が違っても同じファイルなら止めます）。
 - **端末から取り込む（コピー）**: アプリの作業フォルダにコピーして使います。
 
 同じイメージを2つのドライブに入れることはできません（イメージが壊れるため）。
@@ -197,7 +197,8 @@ E:HOSTDRV G
 
 | 項目 | 状況 |
 |---|---|
-| SD カード上のイメージを直接開く | 確認済み（XZ3）。SD カードが読めないときにアプリを開くと「今は開けない」と知らせる。「終了」を選んで、SD カードを読めるようにしてからアプリを開き直せば、そのまま元どおりに使える（v0.86-a16 から。履歴は消えない） |
+| SD カード上のイメージを直接開く | 確認済み（XZ3）。SD カードが読めないときにアプリを開くと「今は開けない」と知らせる。「終了」を選んで、SD カードを読めるようにしてからアプリを開き直せば、そのまま元どおりに使える（v0.86-a16 から。履歴は消えない。v0.86-a17 から、ファイルを選ぶ画面の「ダウンロード」や「最近」から選んだものも、カードを抜いたまま起動して消えなくなった） |
+| 画面分割（マルチウィンドウ） | 未対応。動きはするが、上下に分けるとソフトキーが画面を覆い、下の列が切れる。左右に分けると画面とキーが小さくなり、キーボードの下の列が切れる |
 | NFD r1 の特殊読み込み（READ DIAGNOSTIC など） | 未確認 |
 | .hdn（RaSCSI）の中身のあるイメージ | 未確認（.hds と同じ処理） |
 | N88-BASIC 形式の BKDSK（.HDB・.DDB） | 形式の判定だけ確認済み |
@@ -217,7 +218,7 @@ Android 向けの変更点と、NP2kai から取り込んだ部分の説明は�
 - [app/src/main/cpp/np2/diskimage/README-ANDROID.txt](app/src/main/cpp/np2/diskimage/README-ANDROID.txt)（FDD）
 - [app/src/main/cpp/np2/generic/README-ANDROID.txt](app/src/main/cpp/np2/generic/README-ANDROID.txt)（ホストドライブ）
 - [app/src/main/cpp/np2/i386c/README-ANDROID.txt](app/src/main/cpp/np2/i386c/README-ANDROID.txt)（IA-32 CPU コア）
-- [app/src/main/cpp/np2/bios/README-ANDROID.txt](app/src/main/cpp/np2/bios/README-ANDROID.txt)（代わりの BIOS）
+- [app/src/main/cpp/np2/bios/README-ANDROID.txt](app/src/main/cpp/np2/bios/README-ANDROID.txt)（互換 BIOS）
 - [app/src/main/cpp/np2/sdl2/README-ANDROID.txt](app/src/main/cpp/np2/sdl2/README-ANDROID.txt)（画面の表示）
 - [app/src/main/cpp/np2/io/README-ANDROID.txt](app/src/main/cpp/np2/io/README-ANDROID.txt)（I/O ポートの振り分け）
 
