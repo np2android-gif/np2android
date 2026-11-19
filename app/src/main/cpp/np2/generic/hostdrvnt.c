@@ -32,6 +32,7 @@
 
 #include	"hostdrv.h"
 #include	"hostdrvs.h"
+#include	"hostdrvsfn.h"	/* ANDROID-HOSTDRV: 短い名前の関数は xnp2 の hostdrvs.h に無いので、別に置く */
 #include	"hostdrvnt.h"
 #include	"hostdrvntdef.h"
 
@@ -49,6 +50,77 @@
 #define	cpu_kmemoryread_w(a)	memp_read16(a)
 #define	cpu_kmemoryread_d(a)	memp_read32(a)
 #endif
+
+#if defined(__ANDROID__)
+#include	<android/log.h>
+#define	HDNT_LOG(...)	__android_log_print(ANDROID_LOG_WARN, "NP2HDRVNT", __VA_ARGS__)
+#else
+#define	HDNT_LOG(...)	(void)0
+#endif
+
+#if defined(CPUCORE_IA32)
+/*
+ * ANDROID-HOSTDRV: ゲストのメモリは、ドライバが渡した線形アドレスで読み書きする。元の cpu_kmemory* は、
+ * ページが無いと I/O の処理の途中でページフォールトを起こして siglongjmp で抜けるので、確保したメモリが
+ * 漏れ、ファイルの表が中途半端に残る。ここでは先にページ表を見て (cpu_lmemory_probe。フォールトを起こさない)、
+ * だめなら読まずに 0 を返し、書かずに捨てて s_memFault を立てる。要求の初めと、ファイルの読み書きの前には
+ * 範囲を確かめ、だめなら何もせずに返す。
+ */
+static int s_memFault = 0;
+
+static int hostdrvNT_probe(UINT32 addr, UINT32 size, int write)
+{
+	const int ucrw = ((write) ? CPU_PAGE_WRITE_DATA : CPU_PAGE_READ_DATA) | CPU_MODE_SUPERVISER;
+	UINT32 last;
+	UINT32 page;
+
+	if (size == 0) return 1;
+	last = addr + (size - 1);
+	if (last < addr)
+	{
+		s_memFault = 1;		// 4GB を回り込む
+		return 0;
+	}
+	page = addr & ~CPU_PAGE_MASK;
+	last &= ~CPU_PAGE_MASK;
+	for (;;)
+	{
+		if (!cpu_lmemory_probe(page, ucrw))
+		{
+			s_memFault = 1;
+			return 0;
+		}
+		if (page == last) break;
+		page += CPU_PAGE_SIZE;
+	}
+	return 1;
+}
+
+static REG8 hostdrvNT_kread8(UINT32 a) { return hostdrvNT_probe(a, 1, 0) ? cpu_kmemoryread(a) : 0; }
+static REG16 hostdrvNT_kread16(UINT32 a) { return hostdrvNT_probe(a, 2, 0) ? cpu_kmemoryread_w(a) : 0; }
+static UINT32 hostdrvNT_kread32(UINT32 a) { return hostdrvNT_probe(a, 4, 0) ? cpu_kmemoryread_d(a) : 0; }
+static void hostdrvNT_kwrite8(UINT32 a, REG8 v) { if (hostdrvNT_probe(a, 1, 1)) cpu_kmemorywrite(a, v); }
+static void hostdrvNT_kwrite16(UINT32 a, REG16 v) { if (hostdrvNT_probe(a, 2, 1)) cpu_kmemorywrite_w(a, v); }
+static void hostdrvNT_kwrite32(UINT32 a, UINT32 v) { if (hostdrvNT_probe(a, 4, 1)) cpu_kmemorywrite_d(a, v); }
+
+#undef	cpu_kmemoryread
+#undef	cpu_kmemoryread_w
+#undef	cpu_kmemoryread_d
+#undef	cpu_kmemorywrite
+#undef	cpu_kmemorywrite_w
+#undef	cpu_kmemorywrite_d
+#define	cpu_kmemoryread(a)		hostdrvNT_kread8(a)
+#define	cpu_kmemoryread_w(a)	hostdrvNT_kread16(a)
+#define	cpu_kmemoryread_d(a)	hostdrvNT_kread32(a)
+#define	cpu_kmemorywrite(a,v)	hostdrvNT_kwrite8((a), (REG8)(v))
+#define	cpu_kmemorywrite_w(a,v)	hostdrvNT_kwrite16((a), (REG16)(v))
+#define	cpu_kmemorywrite_d(a,v)	hostdrvNT_kwrite32((a), (UINT32)(v))
+#else
+#define	hostdrvNT_probe(addr, size, write)	(1)
+#endif
+
+/* ANDROID-HOSTDRV: ファイルの読み書きで一度に確保する大きさの上限。要求がこれより長ければ分けて読み書きする */
+#define	HOSTDRVNT_IOCHUNK	(1024 * 1024)
 
 #if 0
 #undef	TRACEOUT
@@ -294,6 +366,18 @@ void hostdrvNT_updateHDrvRoot(void)
 	ZeroMemory(s_hdrvRoot, sizeof(s_hdrvRoot));
 	MultiByteToWideChar(CP_UTF8, 0, cfghdrvroot, strlen(cfghdrvroot) + 1, s_hdrvRoot, lengthUnicode);
 #endif
+#if !defined(WIN32) && !defined(_WIN32)
+	/* ANDROID-HOSTDRV: ゲストのパスは PathCanonicalizeW で「\」区切りになり、ルートと文字列のまま比べる
+	 * (hostdrvNT_isPathInsideRoot)。絶対パスで渡したルートは「/」区切りのまま残り、ルートより下が
+	 * すべて「外」になって何も開けなかったので、ここで「\」にそろえる (末尾の区切りはこの下で外す) */
+	{
+		WCHAR *p;
+		for (p = s_hdrvRoot; *p != '\0'; p++)
+		{
+			if (*p == '/') *p = '\\';
+		}
+	}
+#endif
 
 	// 最後の文字が\なら除去
 	slen = wcslen(s_hdrvRoot);
@@ -399,6 +483,7 @@ static int hostdrvNT_getAlternateShortName(const NP2HOSTDRVNT_FILEINFO *fi, WCHA
 static int hostdrvNT_getEmptyFile()
 {
 	int i;
+	if (hostdrvNT.files == NULL) return -1; // ANDROID-HOSTDRV: 表はまだ確保していない
 	for (i = 1; i < NP2HOSTDRVNT_FILES_MAX; i++)
 	{ // 0は使わないことにする
 		if (!hostdrvNT.files[i].fileName) return i;
@@ -721,6 +806,7 @@ static void hostdrvNT_closeFile(int index)
 static void hostdrvNT_closeAllFiles()
 {
 	int i;
+	if (hostdrvNT.files == NULL) return; // ANDROID-HOSTDRV: 表はまだ確保していない
 	// 0は使わないことにする
 	for (i = 1; i < NP2HOSTDRVNT_FILES_MAX; i++)
 	{
@@ -733,6 +819,7 @@ static int hostdrvNT_reopenFile(int index)
 	NP2HOSTDRVNT_FILEINFO *fi;
 
 	if (index < 0 || index >= NP2HOSTDRVNT_FILES_MAX) return 0;
+	if (hostdrvNT.files == NULL) return 0; // ANDROID-HOSTDRV: 表はまだ確保していない
 
 	fi = &hostdrvNT.files[index];
 	if (fi->fileName == NULL || fi->hostFileName == NULL ||
@@ -949,6 +1036,15 @@ static int hostdrvNT_hasInvalidWildcard(WCHAR* name)
 
 static void hostdrvNT_memread(UINT32 vaddr, void* buffer, UINT32 size)
 {
+#if defined(CPUCORE_IA32)
+	/* ANDROID-HOSTDRV: 範囲を先に確かめ、ページ単位でまとめて読む。だめなら 0 で埋めて返す */
+	if (!hostdrvNT_probe(vaddr, size, 0))
+	{
+		memset(buffer, 0, size);
+		return;
+	}
+	cpu_memory_access_la_region(vaddr, size, CPU_PAGE_READ_DATA | CPU_MODE_SUPERVISER, (UINT8 *)buffer);
+#else
 	UINT32 readaddr = vaddr;
 	UINT32 readsize = size;
 	UINT8* readptr = (UINT8*)buffer;
@@ -966,9 +1062,18 @@ static void hostdrvNT_memread(UINT32 vaddr, void* buffer, UINT32 size)
 		readptr++;
 		readaddr++;
 	}
+#endif
 }
 static void hostdrvNT_memwrite(UINT32 vaddr, void* buffer, UINT32 size)
 {
+#if defined(CPUCORE_IA32)
+	/* ANDROID-HOSTDRV: 範囲を先に確かめ、ページ単位でまとめて書く。だめなら何も書かない */
+	if (!hostdrvNT_probe(vaddr, size, 1))
+	{
+		return;
+	}
+	cpu_memory_access_la_region(vaddr, size, CPU_PAGE_WRITE_DATA | CPU_MODE_SUPERVISER, (UINT8 *)buffer);
+#else
 	UINT32 writeaddr = vaddr;
 	UINT32 writesize = size;
 	UINT8* writeptr = (UINT8*)buffer;
@@ -986,6 +1091,7 @@ static void hostdrvNT_memwrite(UINT32 vaddr, void* buffer, UINT32 size)
 		writeptr++;
 		writeaddr++;
 	}
+#endif
 }
 
 static void hostdrvNT_readFileObject(HOSTDRVNT_INVOKEINFO* invokeInfo, NP2_FILE_OBJECT *lpFileObject)
@@ -1069,7 +1175,8 @@ static int hostdrvNT_readSetInformationData(HOSTDRVNT_INVOKEINFO* invokeInfo, vo
 static NP2HOSTDRVNT_FILEINFO* hostdrvNT_getFileInfo(NP2_FILE_OBJECT* fileObject)
 {
 	UINT32 fsContextFileIndex = cpu_kmemoryread_d(fileObject->FsContext + s_fsContextUserDataOffset);
-	if (fsContextFileIndex == 0 || NP2HOSTDRVNT_FILES_MAX <= fsContextFileIndex || hostdrvNT.files[fsContextFileIndex].fileName == NULL)
+	// ANDROID-HOSTDRV: 表をまだ確保していなければ NULL
+	if (hostdrvNT.files == NULL || fsContextFileIndex == 0 || NP2HOSTDRVNT_FILES_MAX <= fsContextFileIndex || hostdrvNT.files[fsContextFileIndex].fileName == NULL)
 	{
 		return NULL;
 	}
@@ -3479,35 +3586,51 @@ static void hostdrvNT_IRP_MJ_READ(HOSTDRVNT_INVOKEINFO* invokeInfo)
 			copySize = length;
 		}
 
-		// バッファを確保
-		fileReadBuffer = (BYTE*)malloc(copySize);
-		if (!fileReadBuffer)
-		{
-			cpu_kmemorywrite_d(invokeInfo->statusAddr, NP2_STATUS_INVALID_PARAMETER);
-			cpu_kmemorywrite_d(invokeInfo->statusAddr + 4, 0); // Information
-			return;
-		}
-		bytesRead = 0;
-		if (!ReadFile(fh, fileReadBuffer, copySize, &bytesRead, NULL))
-		{
-			free(fileReadBuffer);
-			cpu_kmemorywrite_d(invokeInfo->statusAddr, NP2_STATUS_INVALID_PARAMETER);
-			cpu_kmemorywrite_d(invokeInfo->statusAddr + 4, 0); // Information
-			return;
-		}
-
-		// 書き込み
-		if (invokeInfo->outBufferAddr != 0)
-		{
-			hostdrvNT_memwrite(invokeInfo->outBufferAddr, fileReadBuffer, copySize);
-		}
-		else
+		/* ANDROID-HOSTDRV: 元は要求の長さのまま確保して一度に読んでいた (最大 4GB)。書き込み先を先に
+		 * 確かめ、HOSTDRVNT_IOCHUNK ずつ読んでゲストに写す。返す長さは実際に読めた長さにする */
+		if (invokeInfo->outBufferAddr == 0)
 		{
 			copySize = 0;
 		}
+		else
+		{
+			UINT64 done = 0;
+			UINT32 chunk = (copySize < HOSTDRVNT_IOCHUNK) ? (UINT32)copySize : HOSTDRVNT_IOCHUNK;
 
-		// もう要らないのでメモリ解放
-		free(fileReadBuffer);
+			if (!hostdrvNT_probe(invokeInfo->outBufferAddr, (UINT32)copySize, 1) ||
+				(fileReadBuffer = (BYTE*)malloc(chunk)) == NULL)
+			{
+				if (reopenIndex)
+					hostdrvNT_preCloseFile(reopenIndex);
+				cpu_kmemorywrite_d(invokeInfo->statusAddr, NP2_STATUS_INVALID_PARAMETER);
+				cpu_kmemorywrite_d(invokeInfo->statusAddr + 4, 0); // Information
+				return;
+			}
+			while (done < copySize)
+			{
+				DWORD want = (copySize - done < chunk) ? (DWORD)(copySize - done) : chunk;
+				bytesRead = 0;
+				if (!ReadFile(fh, fileReadBuffer, want, &bytesRead, NULL))
+				{
+					if (done == 0)
+					{
+						free(fileReadBuffer);
+						if (reopenIndex)
+							hostdrvNT_preCloseFile(reopenIndex);
+						cpu_kmemorywrite_d(invokeInfo->statusAddr, NP2_STATUS_INVALID_PARAMETER);
+						cpu_kmemorywrite_d(invokeInfo->statusAddr + 4, 0); // Information
+						return;
+					}
+					break;
+				}
+				if (bytesRead == 0) break;
+				hostdrvNT_memwrite(invokeInfo->outBufferAddr + (UINT32)done, fileReadBuffer, bytesRead);
+				done += bytesRead;
+				if (bytesRead < want) break;
+			}
+			free(fileReadBuffer);
+			copySize = done;
+		}
 
 		// 同期アクセスならバイトオフセットを更新
 		if (fileObject.Flags & NP2_FO_SYNCHRONOUS_IO)
@@ -3632,40 +3755,46 @@ static void hostdrvNT_IRP_MJ_WRITE(HOSTDRVNT_INVOKEINFO* invokeInfo)
 		// 書き込みサイズ
 		copySize = length;
 
-		// バッファを確保
-		fileWriteBuffer = (BYTE*)malloc(copySize);
-		if (!fileWriteBuffer)
+		/* ANDROID-HOSTDRV: 元は要求の長さのまま確保して一度に書いていた (最大 4GB)。読み出し元を先に
+		 * 確かめ (読めないまま書くと、ファイルに 0 が入る)、HOSTDRVNT_IOCHUNK ずつゲストから写して書く */
 		{
-			cpu_kmemorywrite_d(invokeInfo->statusAddr, NP2_STATUS_INVALID_PARAMETER);
-			cpu_kmemorywrite_d(invokeInfo->statusAddr + 4, 0); // Information
-			return;
-		}
+			UINT64 done = 0;
+			UINT32 chunk = (copySize < HOSTDRVNT_IOCHUNK) ? (UINT32)copySize : HOSTDRVNT_IOCHUNK;
 
-		// 書き込みデータをメモリから読み取り
-		if (invokeInfo->inBufferAddr != 0)
-		{
-			hostdrvNT_memread(invokeInfo->inBufferAddr, fileWriteBuffer, copySize);
-		}
-		else
-		{
+			if (invokeInfo->inBufferAddr == 0 ||
+				!hostdrvNT_probe(invokeInfo->inBufferAddr, (UINT32)copySize, 0) ||
+				(fileWriteBuffer = (BYTE*)malloc(chunk)) == NULL)
+			{
+				if (reopenIndex)
+					hostdrvNT_preCloseFile(reopenIndex);
+				cpu_kmemorywrite_d(invokeInfo->statusAddr, NP2_STATUS_INVALID_PARAMETER);
+				cpu_kmemorywrite_d(invokeInfo->statusAddr + 4, 0); // Information
+				return;
+			}
+			while (done < copySize)
+			{
+				DWORD want = (copySize - done < chunk) ? (DWORD)(copySize - done) : chunk;
+				hostdrvNT_memread(invokeInfo->inBufferAddr + (UINT32)done, fileWriteBuffer, want);
+				bytesWrite = 0;
+				if (!WriteFile(fh, fileWriteBuffer, want, &bytesWrite, NULL) || bytesWrite == 0)
+				{
+					if (done == 0)
+					{
+						free(fileWriteBuffer);
+						if (reopenIndex)
+							hostdrvNT_preCloseFile(reopenIndex);
+						cpu_kmemorywrite_d(invokeInfo->statusAddr, NP2_STATUS_INVALID_PARAMETER);
+						cpu_kmemorywrite_d(invokeInfo->statusAddr + 4, 0); // Information
+						return;
+					}
+					break;
+				}
+				done += bytesWrite;
+				if (bytesWrite < want) break;
+			}
 			free(fileWriteBuffer);
-			cpu_kmemorywrite_d(invokeInfo->statusAddr, NP2_STATUS_INVALID_PARAMETER);
-			cpu_kmemorywrite_d(invokeInfo->statusAddr + 4, 0); // Information
-			return;
+			copySize = done;
 		}
-
-		// ファイルに書き込む
-		bytesWrite = 0;
-		if (!WriteFile(fh, fileWriteBuffer, copySize, &bytesWrite, NULL))
-		{
-			free(fileWriteBuffer);
-			cpu_kmemorywrite_d(invokeInfo->statusAddr, NP2_STATUS_INVALID_PARAMETER);
-			cpu_kmemorywrite_d(invokeInfo->statusAddr + 4, 0); // Information
-			return;
-		}
-
-		// ファイルを閉じる
-		free(fileWriteBuffer);
 
 		// 同期アクセスならバイトオフセットを更新
 		if (fileObject.Flags & 0x00000002) // FO_SYNCHRONOUS_IO
@@ -3787,6 +3916,22 @@ static void hostdrvNT_invoke()
 	// WHPXレジスタ→猫レジスタにコピー
 	ia32whpx_copyregWHPXtoNP2();
 #endif
+
+	/* ANDROID-HOSTDRV: 表が無い (NT 版を有効にしていない) なら何もしない。要求の初めに、ドライバが渡した
+	 * データ (最大 48 バイト)・要求の内容・結果を書く場所がページ表で読み書きできるかを確かめ、だめなら
+	 * 何もせずに返す (ゲストのドライバは結果を受け取れないが、エミュレータの状態は変えない) */
+	if (hostdrvNT.files == NULL)
+	{
+		return;
+	}
+	s_memFault = 0;
+	if (!hostdrvNT_probe(hostdrvNT.dataAddr, (hostdrvNT.cmdBaseVersion >= 1) ? 48 : 24, 1) ||
+		!hostdrvNT_probe(cpu_kmemoryread_d(hostdrvNT.dataAddr), sizeof(NP2_IO_STACK_LOCATION), 0) ||
+		!hostdrvNT_probe(cpu_kmemoryread_d(hostdrvNT.dataAddr + 4), 8, 1))
+	{
+		HDNT_LOG("invalid request address 0x%08x", hostdrvNT.dataAddr);
+		return;
+	}
 
 	// ドライバから渡されたメモリアドレスからデータを直接読み取り
 	hostdrvNT_memread(cpu_kmemoryread_d(hostdrvNT.dataAddr), &invokeInfo.stack, sizeof(NP2_IO_STACK_LOCATION));
@@ -3931,6 +4076,14 @@ static void hostdrvNT_invoke()
 
 	TRACEOUTW((HD_W("  -> Return Status: 0x%08x"), cpu_kmemoryread_d(invokeInfo.statusAddr)));
 
+	/* ANDROID-HOSTDRV: 途中でゲストのメモリを読み書きできなかったら、結果はエラーにする */
+	if (s_memFault)
+	{
+		HDNT_LOG("guest memory not accessible (IRP_MJ 0x%02x)", invokeInfo.stack.majorFunction);
+		cpu_kmemorywrite_d(invokeInfo.statusAddr, NP2_STATUS_INVALID_PARAMETER);
+		cpu_kmemorywrite_d(invokeInfo.statusAddr + 4, 0); // Information
+	}
+
 	if (hostdrvNT.version >= 2)
 	{
 		cpu_kmemorywrite_d(hostdrvNT.dataAddr + 40, s_pendingIndexOrCompleteCount);
@@ -3964,6 +4117,12 @@ static void hostdrvNT_invokeNotify()
 	// WHPXレジスタ→猫レジスタにコピー
 	ia32whpx_copyregWHPXtoNP2();
 #endif
+
+	/* ANDROID-HOSTDRV: hostdrvNT_invoke と同じく、表が無いか、データが読み書きできなければ何もしない */
+	if (hostdrvNT.files == NULL || !hostdrvNT_probe(hostdrvNT.dataAddr, 20, 1))
+	{
+		return;
+	}
 
 	// ドライバから渡されたメモリアドレスからデータを直接読み取り
 	hostdrvNT.version = cpu_kmemoryread_d(hostdrvNT.dataAddr);
@@ -4068,7 +4227,14 @@ static REG8 IOINPCALL hostdrvNT_i7ee(UINT port)
 
 void hostdrvNT_initialize(void)
 {
+	/* ANDROID-HOSTDRV: 表 (files) は確保したまま残し、確保してあるときだけ 0 で埋める */
+	NP2HOSTDRVNT_FILEINFO *files = hostdrvNT.files;
 	ZeroMemory(&hostdrvNT, sizeof(hostdrvNT));
+	hostdrvNT.files = files;
+	if (files != NULL)
+	{
+		ZeroMemory(files, sizeof(NP2HOSTDRVNT_FILEINFO) * NP2HOSTDRVNT_FILES_MAX);
+	}
 
 	hostdrvNT_updateHDrvRoot();
 
@@ -4093,7 +4259,16 @@ void hostdrvNT_reset(void)
 
 void hostdrvNT_bind(void)
 {
-	if (np2cfg.hdrvntenable)
+	/* ANDROID-HOSTDRV: 初めて有効にしたときに表を確保する。確保できなければポートを付けない */
+	if (np2cfg.hdrvntenable && hostdrvNT.files == NULL)
+	{
+		hostdrvNT.files = (NP2HOSTDRVNT_FILEINFO *)calloc(NP2HOSTDRVNT_FILES_MAX, sizeof(NP2HOSTDRVNT_FILEINFO));
+		if (hostdrvNT.files == NULL)
+		{
+			HDNT_LOG("cannot allocate the file table");
+		}
+	}
+	if (np2cfg.hdrvntenable && hostdrvNT.files != NULL)
 	{
 		iocore_attachout(0x07ec, hostdrvNT_o7ec);
 		iocore_attachout(0x07ee, hostdrvNT_o7ee);

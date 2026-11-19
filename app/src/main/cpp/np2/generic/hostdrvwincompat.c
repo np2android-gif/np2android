@@ -867,7 +867,9 @@ HANDLE CreateFileW(const WCHAR *path, DWORD desiredAccess, DWORD shareMode,
 	case TRUNCATE_EXISTING: oflags |= O_TRUNC; break;
 	default: SetLastError(ERROR_INVALID_PARAMETER); return INVALID_HANDLE_VALUE;
 	}
-	fd = open(native, oflags, 0666);
+	/* ANDROID-HOSTDRV: O_NOFOLLOW. hostdrvnt.c refuses symbolic links before opening (lstat), but a link
+	 * swapped in after that check would still be followed. Never follow one at the last component. */
+	fd = open(native, oflags | O_NOFOLLOW, 0666);
 	if (fd < 0) { SetLastError(hd_errno_error(errno)); return INVALID_HANDLE_VALUE; }
 	if (fstat(fd, &st) != 0) { SetLastError(hd_errno_error(errno)); close(fd); return INVALID_HANDLE_VALUE; }
 	if (!hd_share_compatible(&st, native, desiredAccess, shareMode)) { close(fd); SetLastError(ERROR_SHARING_VIOLATION); return INVALID_HANDLE_VALUE; }
@@ -1044,6 +1046,13 @@ BOOL SetFileTime(HANDLE handle, const FILETIME *creation, const FILETIME *access
 	(void)creation;
 	if (!h || h == INVALID_HANDLE_VALUE || h->type != HD_HANDLE_FILE) { SetLastError(ERROR_INVALID_HANDLE); return FALSE; }
 	if (fstat(h->fd, &st) != 0) { SetLastError(hd_errno_error(errno)); return FALSE; }
+	/* ANDROID-HOSTDRV: as in Win32 SetFileTime / FILE_BASIC_INFORMATION, a zero time (and all ones)
+	 * means "leave it unchanged". Copying from Windows 2000 sends zeros, and the file got 1601-01-01. */
+	if (access && ((access->dwLowDateTime == 0 && access->dwHighDateTime == 0) ||
+		(access->dwLowDateTime == 0xffffffffUL && access->dwHighDateTime == 0xffffffffUL))) access = NULL;
+	if (writeft && ((writeft->dwLowDateTime == 0 && writeft->dwHighDateTime == 0) ||
+		(writeft->dwLowDateTime == 0xffffffffUL && writeft->dwHighDateTime == 0xffffffffUL))) writeft = NULL;
+	if (!access && !writeft) { SetLastError(ERROR_SUCCESS); return TRUE; }
 	ts[0].tv_sec = access ? (time_t)hd_filetime_seconds(access) : st.st_atime; ts[0].tv_nsec = 0;
 	ts[1].tv_sec = writeft ? (time_t)hd_filetime_seconds(writeft) : st.st_mtime; ts[1].tv_nsec = 0;
 	if (futimens(h->fd, ts) != 0) { SetLastError(hd_errno_error(errno)); return FALSE; }

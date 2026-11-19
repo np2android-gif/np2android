@@ -11,8 +11,8 @@ xnp2 の hostdrv はファイルの削除・名前の変更 (常にアクセス�
 8.3 に縮めて同じ名前になるファイルは、readdir で先に返ったものだけが見え、上書きもそちらに効く
 (後のものは見えず、触られない)。共有ストレージは大文字・小文字を区別しないので、a.txt と A.TXT は
 そもそも同時に置けない。
-hostdrv.c・hostdrvs.c は xnp2 のまま。NP21/W の hostdrv (新方式、長い名前の 8.3 名の割り当て、
-Windows 9x/NT 用) は取り込んでいない。
+hostdrv.c・hostdrvs.c は xnp2 のまま。NP21/W の DOS 版 hostdrv (新方式、長い名前の 8.3 名の割り当て)
+と Windows 9x 用は取り込んでいない。Windows NT/2000 用は下の「Windows NT 用ホストドライブ」。
 
 Android 向けの変更 (変更箇所には /* ANDROID-HOSTDRV */ の印を付けている)
   - 設定の正は Kotlin の Settings で、np2.cfg には保存しない。Np2Native.setHostDrv で
@@ -37,3 +37,57 @@ Android 向けの変更 (変更箇所には /* ANDROID-HOSTDRV */ の印を付�
       hostdrv の節が無いステートをロードしたときに今のマウントが残らないようにする。
     statsave_load の終わりで、ホストドライブが無効 (hdrvroot が空) なら hostdrv_reset を呼び、
       ステートのマウント状態を戻さない。
+
+
+Windows NT 用ホストドライブ (hostdrvnt)
+========================================
+
+Windows NT/2000 から HOSTDRV/ をドライブ (ふつうは Z:) として使う。ゲストには NP21/W の
+「Neko Project II ホスト共有ドライブドライバ for WinNT」(hstdrvnt) を入れる。
+
+取り込み元: Neko Project 21/W rev107 (np21w-src-rev107) の generic/
+  hostdrvnt.c・hostdrvnt.h・hostdrvntdef.h (Shift_JIS、LF)、hostdrvwincompat.c・hostdrvwincompat.h (ASCII)。
+  文字コードは元のまま。ライセンスは NP21/W の LICENSES/LICENSE.TXT (3 条項 BSD、
+  Copyright (c) 1999-2025, NP2 developer team)。
+  hostdrvwincompat.c は、Windows 以外で Win32 のファイル API の代わりをする層 (NP21/W の X11・macOS 版も使う)。
+  この 2 つの .c だけ -std=gnu11 でビルドする (UTF-16 の文字列 u"…" を使う。CMakeLists.txt)。
+  port/compiler.h で SUPPORT_HOSTDRVNT を定義し、TCHAR を char にする (IA-32 構成だけ)。
+
+Android 向けの変更 (変更箇所には /* ANDROID-HOSTDRV */ の印を付けている)
+  - hostdrvnt.c
+    hostdrvNT_updateHDrvRoot: ルートの区切りを「\」にそろえる。ゲストのパスは「\」区切りになり、
+      ルートと文字列のまま比べるので、絶対パスのルート (「/」区切り) のままだと何も開けなかった。
+    ゲストのメモリの読み書き: cpu_kmemory* を、先にページ表を見る形に置き換える (cpu_lmemory_probe。
+      i386c/ia32/paging.c に足した)。元はページが無いと I/O の処理の途中でページフォールトになり、
+      siglongjmp で抜けて確保したメモリが漏れ、ファイルの表が中途半端に残った。要求の初めに、
+      ドライバが渡したデータ・要求の内容・結果を書く場所を確かめ、だめなら何もせずに返す。途中で
+      読み書きできなかったら結果をエラーにする。hostdrvNT_memread / memwrite は範囲を先に確かめて、
+      ページ単位でまとめて読み書きする。
+    READ / WRITE: 要求の長さのまま確保していた (最大 4GB) のをやめ、相手の範囲を先に確かめてから
+      HOSTDRVNT_IOCHUNK (1MB) ずつ読み書きする。Windows 2000 の copy が送る長さは最大 65,024 バイト
+      だった (100MB のファイルで確認) ので、ふつうは分かれない。返す長さは実際に読み書きできた長さ。
+    ファイルの表 (65536 件、arm64 で 6MB): 構造体の配列をポインタにし、NT 版を初めて有効にしたとき
+      (hostdrvNT_bind) に確保する。元は起動・リセットのたびに全部を 0 で埋め、使わない人も 6MB 使っていた。
+      表が無い間は、要求を何もせずに返す。
+  - hostdrvwincompat.c
+    CreateFileW: open に O_NOFOLLOW を足す (確かめてから開くまでの間にシンボリックリンクに替えられても辿らない)。
+    SetFileTime: 時刻が 0 (とすべて 1) なら変えない (Win32 / FILE_BASIC_INFORMATION と同じ)。元は
+      Windows 2000 から写したファイルの日付が 1601-01-01 になった。
+  - hostdrvsfn.h・hostdrvsfn.c (新しく作った)
+    hostdrvnt.c が使う短い名前 (8.3 名) の 7 関数。NP21/W では generic/hostdrvs.c にあるが、xnp2 の
+    hostdrvs.c と関数名・型名がぶつかるので分けた。今は仮の実装で、どの名前にも短い名前が無いと返す
+    (Windows では長い名前だけが見え、dir /x の短い名前は空)。
+  - pccore.h: np2cfg に hdrvenable (ホストドライブ全体。NT 版は呼び出しのたびに見る) と hdrvntenable
+    (NT 版のポートを付けるか。リセットで効く) を足す。名前は NP21/W と同じ。初期値の並びの後ろに置く。
+  - pccore.c: 起動・終了・リセットで hostdrvNT を初期化・後始末する。CPU だけのリセット (Windows の再起動)
+    でも hostdrvNT_reset を呼ぶ (NP21/W と同じ)。
+  - io/iocore.c: bind の表に hostdrvNT_bind (ポート 07ECh・07EEh。上位バイト 07 の拡張表に付くので、
+    sysiomsk の値に関係なく同じ)。
+  - port/np2bridge.c: Kotlin の「Windows NT/2000 からも使う」を HOSTDRV_NT で受け、np2bridge_hostdrv が
+    hdrvenable・hdrvntenable を入れて hostdrvNT_updateHDrvRoot を呼ぶ (権限も次の要求から効く)。
+    無効にしたときは hostdrvNT_reset で開いているファイルを閉じる。
+
+まだ入れていないもの
+  - ステート (NP21/W の HOSTDRVNT 節)。今はステートに保存せず、ロードしても NT 版の状態は戻らない。
+  - 短い名前の本当の実装 (NP21/W の hostdrvs.c の該当部分と、sdl2/dosio の file_getinfo など 4 関数)。
+  - 「削除・名前の変更を許可」の設定 (np2bridge は削除のビットを受け取れるが、Kotlin は常に false を渡す)。

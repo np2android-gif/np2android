@@ -144,6 +144,12 @@ struct tagNP2Config
 	OEMCHAR	hdrvroot[MAX_PATH];
 
 	UINT16	sysiomsk;		/* ANDROID-IO: 0xff00 = system devices only at upper byte 0 (PC-9821, NP21/W SYSIOMSK), 0x0000 = ignore bits other than 0x0c00 (old PC-98) */
+
+	/* ANDROID-HOSTDRV: NP21/W と同じ名前。hdrvenable はホストドライブ全体 (NT 版は呼び出しのたびに見る)、
+	 * hdrvntenable は NT 版のポートを付けるか (リセットで効く)。設定の正は Kotlin で、np2bridge_hostdrv() が入れる。
+	 * 上の初期値の並び (pccore.c) より後ろに置くので、初期値は 0 */
+	UINT8	hdrvenable;
+	UINT8	hdrvntenable;
 };
 typedef struct tagNP2Config  NP2CFG;		/*!< The define of config */
 

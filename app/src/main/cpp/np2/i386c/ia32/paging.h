@@ -321,6 +321,8 @@ cpu_lmemorywrite_f(UINT32 laddr, const REG80 *value, int ucrw)
  */
 void MEMCALL cpu_memory_access_la_region(UINT32 address, UINT length, int ucrw, UINT8 *data);
 UINT32 MEMCALL laddr2paddr(UINT32 laddr, int ucrw);
+/* ANDROID-HOSTDRV: ページフォールトにならないか (例外を起こさずに確かめる。paging.c) */
+int MEMCALL cpu_lmemory_probe(UINT32 laddr, int ucrw);
 
 STATIC_INLINE UINT32 MEMCALL
 laddr_to_paddr(UINT32 laddr, int ucrw)

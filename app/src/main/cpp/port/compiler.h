@@ -169,6 +169,10 @@ typedef	signed char			BOOL;
 #define	SUPPORT_IDEIO
 /* SCSI HDD (PC-9801-55 相当)。np2kai の IA-32 構成も IDE と併用している */
 #define	SUPPORT_SCSI
+/* ANDROID-HOSTDRV: Windows NT/2000 用のホストドライブ (NP21/W の generic/hostdrvnt.c)。Windows 以外では
+ * hostdrvwincompat.c が Win32 のファイル API の代わりをする。TCHAR は NP21/W の x11 版と同じく 1 バイト */
+#define	SUPPORT_HOSTDRVNT
+typedef	char				TCHAR;
 #define	msgbox(title, msg)	SDL_Log("%s: %s", (title), (msg))
 #else
 /* PC-9801 (i286) 構成 */

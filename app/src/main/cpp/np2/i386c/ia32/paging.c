@@ -639,6 +639,39 @@ laddr2paddr(UINT32 laddr, int ucrw)
 }
 
 /*
+ * ANDROID-HOSTDRV: laddr を ucrw で読み書きしたときに、ページフォールトにならないか。
+ * paging() と同じ判定をするが、例外は起こさず、TLB と A/D ビットも変えない。
+ * I/O の処理の中でゲストのメモリに触る前に確かめるため (generic/hostdrvnt.c)。
+ * TLB に古い項目が残っていても、ここはページ表だけを見るので、だめと答える向きにしかずれない。
+ */
+int MEMCALL
+cpu_lmemory_probe(UINT32 laddr, int ucrw)
+{
+	UINT32 pde;
+	UINT32 pte;
+	UINT bit;
+
+	if (!CPU_STAT_PAGING)
+		return 1;
+
+	pde = cpu_memoryread_d(CPU_STAT_PDE_BASE + ((laddr >> 20) & 0xffc));
+	if (!(pde & CPU_PDE_PRESENT))
+		return 0;
+	pte = cpu_memoryread_d((pde & CPU_PDE_BASEADDR_MASK) + ((laddr >> 10) & 0xffc));
+	if (!(pte & CPU_PTE_PRESENT))
+		return 0;
+
+	bit  = ucrw & (CPU_PAGE_WRITE|CPU_PAGE_USER_MODE);
+	bit |= (pde & pte & (CPU_PTE_WRITABLE|CPU_PTE_USER_MODE));
+	bit |= CPU_STAT_WP;
+#if !defined(USE_PAGE_ACCESS_TABLE)
+	return (page_access & (1 << bit)) ? 1 : 0;
+#else
+	return (page_access_bit[bit]) ? 1 : 0;
+#endif
+}
+
+/*
  * paging
  */
 static UINT32 MEMCALL

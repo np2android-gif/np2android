@@ -43,6 +43,9 @@
 #if defined(SUPPORT_HOSTDRV)
 #include	"hostdrv.h"
 #endif
+#if defined(SUPPORT_HOSTDRVNT)
+#include	"hostdrvnt.h"	/* ANDROID-HOSTDRV */
+#endif
 #include	"np2ver.h"
 #include	"calendar.h"
 #include	"timing.h"
@@ -271,12 +274,18 @@ void pccore_init(void) {
 #if defined(SUPPORT_HOSTDRV)
 	hostdrv_initialize();
 #endif
+#if defined(SUPPORT_HOSTDRVNT)
+	hostdrvNT_initialize();		/* ANDROID-HOSTDRV */
+#endif
 }
 
 void pccore_term(void) {
 
 #if defined(SUPPORT_HOSTDRV)
 	hostdrv_deinitialize();
+#endif
+#if defined(SUPPORT_HOSTDRVNT)
+	hostdrvNT_deinitialize();	/* ANDROID-HOSTDRV */
 #endif
 
 #if !defined(DISABLE_SOUND)
@@ -425,6 +434,9 @@ void pccore_reset(void) {
 
 #if defined(SUPPORT_HOSTDRV)
 	hostdrv_reset();
+#endif
+#if defined(SUPPORT_HOSTDRVNT)
+	hostdrvNT_reset();			/* ANDROID-HOSTDRV */
 #endif
 
 	timing_reset();
@@ -642,6 +654,11 @@ void pccore_exec(BOOL draw) {
 		if (CPU_RESETREQ) {
 			CPU_RESETREQ = 0;
 			CPU_SHUT();
+#if defined(SUPPORT_HOSTDRVNT)
+			/* ANDROID-HOSTDRV: Windows の再起動 (CPU だけのリセット) でも、開いていたファイルを閉じて
+			 * NT 版を初めの状態に戻す (NP21/W と同じ)。でないと前の起動のファイルの表が残る */
+			hostdrvNT_reset();
+#endif
 		}
 #if !defined(SINGLESTEPONLY)
 		if (CPU_REMCLOCK > 0) {

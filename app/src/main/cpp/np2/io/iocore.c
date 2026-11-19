@@ -8,6 +8,9 @@
 #include	"ideio.h"
 #include	"cs4231io.h"
 #include	"iocore16.tbl"
+#if defined(SUPPORT_HOSTDRVNT)
+#include	"hostdrvnt.h"	/* ANDROID-HOSTDRV */
+#endif
 
 
 	_ARTIC		artic;
@@ -480,6 +483,9 @@ static const FNIOBIND bindfn[] =
 			necio_bind,			epsonio_bind,		emsio_bind,
 #if defined(SUPPORT_PC9821)
 			pcidev_bind,
+#endif
+#if defined(SUPPORT_HOSTDRVNT)
+			hostdrvNT_bind,		/* ANDROID-HOSTDRV: ports 07ECh/07EEh when np2cfg.hdrvntenable */
 #endif
 };
 

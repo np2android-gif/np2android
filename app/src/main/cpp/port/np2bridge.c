@@ -25,6 +25,9 @@
 #include "fdd/sxsi.h"
 #include "fdd/newdisk.h"
 #include "hostdrv.h"
+#if defined(SUPPORT_HOSTDRVNT)
+#include "hostdrvnt.h"
+#endif
 #include <errno.h>
 #include <sys/stat.h>
 
@@ -277,11 +280,12 @@ NP2JNI(setStartupCd)(JNIEnv *env, jclass cls, jstring path)
 enum {
 	HOSTDRV_ENABLE	= 0x01,
 	HOSTDRV_WRITE	= 0x02,
-	HOSTDRV_DELETE	= 0x04
+	HOSTDRV_DELETE	= 0x04,
+	HOSTDRV_NT		= 0x08		/* ANDROID-HOSTDRV: Windows NT/2000 用 (generic/hostdrvnt.c) にも応える */
 };
 static SDL_atomic_t s_hostdrv;
 
-NP2JNI(setHostDrv)(JNIEnv *env, jclass cls, jboolean enabled, jboolean write, jboolean del)
+NP2JNI(setHostDrv)(JNIEnv *env, jclass cls, jboolean enabled, jboolean write, jboolean del, jboolean nt)
 {
 	int v;
 
@@ -293,6 +297,9 @@ NP2JNI(setHostDrv)(JNIEnv *env, jclass cls, jboolean enabled, jboolean write, jb
 		}
 		if (del) {
 			v |= HOSTDRV_DELETE;
+		}
+		if (nt) {
+			v |= HOSTDRV_NT;
 		}
 	}
 	SDL_AtomicSet(&s_hostdrv, v);
@@ -347,7 +354,21 @@ void np2bridge_hostdrv(void)
 			np2cfg.hdrvacc |= HDFMODE_DELETE;
 		}
 	}
-	__android_log_print(ANDROID_LOG_INFO, "NP2HDRV", "root=\"%s\" acc=%d", np2cfg.hdrvroot, np2cfg.hdrvacc);
+#if defined(SUPPORT_HOSTDRVNT)
+	/* ANDROID-HOSTDRV: NT 版。hdrvenable は呼び出しのたびに、hdrvntenable はポートを付けるとき (リセット) に効く。
+	 * ルートと権限は hostdrvNT_updateHDrvRoot で読み直すので、次の要求から効く。無効にしたときは、開いている
+	 * ファイルを閉じる (DOS 版と同じ)。どちらもエミュレータのスレッドで呼ばれる */
+	np2cfg.hdrvenable = (root[0] != '\0') ? 1 : 0;
+	np2cfg.hdrvntenable = ((root[0] != '\0') && (v & HOSTDRV_NT)) ? 1 : 0;
+	if (root[0] == '\0') {
+		hostdrvNT_reset();
+	}
+	else {
+		hostdrvNT_updateHDrvRoot();
+	}
+#endif
+	__android_log_print(ANDROID_LOG_INFO, "NP2HDRV", "root=\"%s\" acc=%d nt=%d", np2cfg.hdrvroot, np2cfg.hdrvacc,
+						np2cfg.hdrvntenable);
 }
 
 /*

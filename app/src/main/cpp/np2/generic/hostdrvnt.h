@@ -49,7 +49,10 @@ typedef struct
 	int cmdBaseVersion; // I/Oコマンド基本バージョン
 	int cmdInvokePos; // I/Oコマンド文字列の位置
 	UINT32 dataAddr; // I/Oコマンドのデータメモリアドレス
-	NP2HOSTDRVNT_FILEINFO files[NP2HOSTDRVNT_FILES_MAX];
+	/* ANDROID-HOSTDRV: 元は NP2HOSTDRVNT_FILEINFO files[NP2HOSTDRVNT_FILES_MAX] (arm64 で 6MB)。
+	 * 起動とリセットのたびに 0 で埋めるので、NT 版を使わない人もそのメモリを使っていた。
+	 * NT 版を初めて有効にしたとき (hostdrvNT_bind) に確保し、それまでは NULL */
+	NP2HOSTDRVNT_FILEINFO *files;
 } HOSTDRVNT;
 
 #ifdef __cplusplus
