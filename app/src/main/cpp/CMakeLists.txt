@@ -98,6 +98,11 @@ add_library(main SHARED ${NP2_SOURCES} ${NP2_CPU_SOURCES})
 file(GLOB NP2_KAICD_SOURCES CONFIGURE_DEPENDS ${NP2}/diskimage/cddfile.c ${NP2}/diskimage/cd/*.c)
 set_source_files_properties(${NP2_KAICD_SOURCES} PROPERTIES COMPILE_DEFINITIONS NP2KAI_CDTRK)
 
+# NP21/W の Windows NT 用ホストドライブ (generic/hostdrvnt.c・hostdrvwincompat.c) は、UTF-16 の文字列 u"…" を
+# 使うので C11 でビルドする (下の -std=gnu99 より後に付くので、こちらが効く)
+set_source_files_properties(${NP2}/generic/hostdrvnt.c ${NP2}/generic/hostdrvwincompat.c
+    PROPERTIES COMPILE_OPTIONS -std=gnu11)
+
 target_include_directories(main PRIVATE
     ${PORT}
     ${NP2}
