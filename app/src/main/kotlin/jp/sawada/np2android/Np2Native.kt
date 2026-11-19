@@ -50,7 +50,7 @@ object Np2Native {
      * 起動時の値はエミュレータスレッドが動き出す前 (onCreate) に渡し、変更のたびにも呼ぶ。
      * 無効にするとマウント中でも外れる (ゲストで使い直すには再起動が要る)。write / delete は enabled のときだけ効く
      */
-    @JvmStatic external fun setHostDrv(enabled: Boolean, write: Boolean, delete: Boolean)
+    @JvmStatic external fun setHostDrv(enabled: Boolean, write: Boolean, delete: Boolean, nt: Boolean)
     /**
      * I/O ポートを 16 ビットで見分けるか (true = PC-9821 / NP21/W の既定、false = 古い PC-98)。
      * 起動時はエミュレータスレッドが動き出す前 (onCreate) に渡す。効くのは次のリセットまたはステートロードから

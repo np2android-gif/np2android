@@ -62,11 +62,19 @@ class Settings(context: Context) {
         set(v) = prefs.edit().putBoolean("hostdrv_write", v).apply()
 
     /**
+     * Windows NT/2000 用のホストドライブ (NP21/W の hostdrvnt.c。ゲストに専用のドライバを入れて使う) にも応える。
+     * 既定はオフ。オフならポートを付けないので a17 までと同じ。効くのはゲストのリセットから
+     */
+    var hostDrvNt: Boolean
+        get() = prefs.getBoolean("hostdrv_nt", false)
+        set(v) = prefs.edit().putBoolean("hostdrv_nt", v).apply()
+
+    /**
      * ホストドライブの設定をエミュレータに渡す。起動時はエミュレータスレッドが動き出す前 (onCreate) に呼ぶ。
      * 削除の許可は渡さない: xnp2 の hostdrv は削除・名前の変更・フォルダの作成に対応していない
-     * (NP21/W 版の hostdrv に置き換えたら、削除の許可を設定に戻す)
+     * (NT 版で使う「削除・名前の変更を許可」は後で足す)
      */
-    fun applyHostDrv() = Np2Native.setHostDrv(hostDrv, hostDrvWrite, false)
+    fun applyHostDrv() = Np2Native.setHostDrv(hostDrv, hostDrvWrite, false, hostDrvNt)
 
     /**
      * I/O ポートを 16 ビットで見分ける (PC-9821。NP21/W の SYSIOMSK=ff00 と同じ)。オフにすると古い PC-98 と同じく
@@ -192,6 +200,13 @@ object SettingsDialog {
             gravity = Gravity.CENTER_VERTICAL
             setOnCheckedChangeListener { _, b -> settings.hostDrvWrite = b; settings.applyHostDrv() }
         }
+        val hdNt = Switch(context).apply {
+            text = context.getString(R.string.hostdrv_nt)
+            isChecked = settings.hostDrvNt
+            isEnabled = settings.hostDrv
+            gravity = Gravity.CENTER_VERTICAL
+            setOnCheckedChangeListener { _, b -> settings.hostDrvNt = b; settings.applyHostDrv() }
+        }
         root.addView(Switch(context).apply {
             text = context.getString(R.string.hostdrv_enable)
             isChecked = settings.hostDrv
@@ -200,9 +215,15 @@ object SettingsDialog {
                 settings.hostDrv = b
                 settings.applyHostDrv()
                 hdWrite.isEnabled = b
+                hdNt.isEnabled = b
             }
         })
         root.addView(hdWrite)
+        root.addView(hdNt)
+        root.addView(TextView(context).apply {
+            setTextAppearance(android.R.style.TextAppearance_DeviceDefault_Small)
+            text = context.getString(R.string.hostdrv_nt_note)
+        })
 
         // ---- I/O ポート ----
         root.addView(TextView(context).apply {
