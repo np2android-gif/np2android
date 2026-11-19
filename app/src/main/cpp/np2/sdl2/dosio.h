@@ -49,6 +49,7 @@ typedef struct {
 	DOSDATE	date;
 	DOSTIME	time;
 	char	path[MAX_PATH];
+	char	shortpath[64];	/* ANDROID-HOSTDRV: NP21/W と同じ。ホストの短い名前 (Android には無いので常に空) */
 } FLINFO;
 
 
@@ -86,6 +87,11 @@ short file_attr_c(const char *path);
 FLISTH file_list1st(const char *dir, FLINFO *fli);
 BRESULT file_listnext(FLISTH hdl, FLINFO *fli);
 void file_listclose(FLISTH hdl);
+/* ANDROID-HOSTDRV: NP21/W の sdl2/dosio と同じ 4 つ。Windows NT 用ホストドライブの短い名前 (generic/hostdrvsfn.c) が使う */
+BRESULT file_getinfo(const char *path, FLINFO *fli);
+BRESULT file_getshortname(const char *path, char *shortname, UINT cchShortName);
+BOOL file_islink(const char *path);
+BOOL file_infoislink(const FLINFO *fli, const char *path);
 
 #define file_cpyname(p, n, m)	milstr_ncpy(p, n, m)
 #define file_cmpname(p, n)		milstr_cmp(p, n)

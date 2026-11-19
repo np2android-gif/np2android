@@ -73,10 +73,17 @@ Android 向けの変更 (変更箇所には /* ANDROID-HOSTDRV */ の印を付�
     CreateFileW: open に O_NOFOLLOW を足す (確かめてから開くまでの間にシンボリックリンクに替えられても辿らない)。
     SetFileTime: 時刻が 0 (とすべて 1) なら変えない (Win32 / FILE_BASIC_INFORMATION と同じ)。元は
       Windows 2000 から写したファイルの日付が 1601-01-01 になった。
-  - hostdrvsfn.h・hostdrvsfn.c (新しく作った)
-    hostdrvnt.c が使う短い名前 (8.3 名) の 7 関数。NP21/W では generic/hostdrvs.c にあるが、xnp2 の
-    hostdrvs.c と関数名・型名がぶつかるので分けた。今は仮の実装で、どの名前にも短い名前が無いと返す
-    (Windows では長い名前だけが見え、dir /x の短い名前は空)。
+  - hostdrvsfn.h・hostdrvsfn.c
+    hostdrvnt.c が使う短い名前 (8.3 名、NAME~1.TXT の形)。NP21/W rev107 の generic/hostdrvs.c の先頭から
+    hostdrvs_lookuplongnamecached までを写した (Shift_JIS のまま)。xnp2 の hostdrvs.c (DOS 版) と関数名・
+    型名がぶつかるので別のファイルにし、元の hostdrvs.h・hostdrv.h にあった型をファイルの中に置いた。
+    DOS 版だけが使う部分 (s_hddroot、GetHostRootPath の宣言、IsMatchFcb、AddFileToList) は除いた。
+    DOS 版 (xnp2 の hostdrv.c・hostdrvs.c) の短い名前は今までどおり (切り詰め、重なると片方だけ)。
+    ディレクトリの変更の監視 (DOSIO_HAS_DIRMONITOR) は無いので、Android 側で増やしたファイルの短い名前は、
+    NP21/W の Windows 以外の版と同じく、キャッシュが捨てられるまで古いことがある。
+  - hostdrvnt.c の hostdrvNT_sfn_wtooem: 短い名前の側に渡すパスの「\」を「/」にする (dosio が開けるように)。
+  - sdl2/dosio.c・dosio.h: FLINFO に shortpath (常に空)、file_getinfo・file_getshortname (常に失敗)・
+    file_islink・file_infoislink を足す (NP21/W の sdl2/dosio の Windows 以外の側と同じ)。
   - pccore.h: np2cfg に hdrvenable (ホストドライブ全体。NT 版は呼び出しのたびに見る) と hdrvntenable
     (NT 版のポートを付けるか。リセットで効く) を足す。名前は NP21/W と同じ。初期値の並びの後ろに置く。
   - pccore.c: 起動・終了・リセットで hostdrvNT を初期化・後始末する。CPU だけのリセット (Windows の再起動)
@@ -98,5 +105,4 @@ Android 向けの変更 (変更箇所には /* ANDROID-HOSTDRV */ の印を付�
     NP21/W と同じく、「閉じたら消す」予約はステートに保存せず、セーブした時点で外れる。
 
 まだ入れていないもの
-  - 短い名前の本当の実装 (NP21/W の hostdrvs.c の該当部分と、sdl2/dosio の file_getinfo など 4 関数)。
   - 「削除・名前の変更を許可」の設定 (np2bridge は削除のビットを受け取れるが、Kotlin は常に false を渡す)。

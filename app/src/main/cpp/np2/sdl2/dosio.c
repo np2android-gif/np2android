@@ -456,6 +456,61 @@ void file_listclose(FLISTH hdl) {
 	closedir(fld->dir);
 	free(fld);
 }
+
+/*
+ * ANDROID-HOSTDRV: NP21/W rev107 の sdl2/dosio.c (Windows 以外の側) と同じ 4 つ。
+ * Windows NT 用ホストドライブの短い名前 (generic/hostdrvsfn.c) が使う。
+ * Android のファイルシステムには短い名前が無いので、file_getshortname は常に失敗し、shortpath は空。
+ */
+BRESULT file_getinfo(const char *path, FLINFO *fli) {
+
+	struct stat	sb;
+	const char	*name;
+
+	if ((path == NULL) || (fli == NULL)) {
+		return(FAILURE);
+	}
+	if (stat(path, &sb) != 0) {
+		return(FAILURE);
+	}
+	memset(fli, 0, sizeof(*fli));
+	fli->caps = FLICAPS_SIZE | FLICAPS_ATTR;
+	fli->size = (UINT32)sb.st_size;
+	if (S_ISDIR(sb.st_mode)) {
+		fli->attr |= FILEATTR_DIRECTORY;
+	}
+	if (!(sb.st_mode & S_IWUSR)) {
+		fli->attr |= FILEATTR_READONLY;
+	}
+	if (cnv_sttime(&sb.st_mtime, &fli->date, &fli->time) == SUCCESS) {
+		fli->caps |= FLICAPS_DATE | FLICAPS_TIME;
+	}
+	name = file_getname(path);
+	file_cpyname(fli->path, name, sizeof(fli->path));
+	return(SUCCESS);
+}
+
+BRESULT file_getshortname(const char *path, char *shortname, UINT cchShortName) {
+
+	(void)path;
+	if ((shortname != NULL) && (cchShortName != 0)) {
+		shortname[0] = '\0';
+	}
+	return(FAILURE);
+}
+
+BOOL file_islink(const char *path) {
+
+	struct stat	sb;
+
+	return ((path != NULL) && (lstat(path, &sb) == 0) && S_ISLNK(sb.st_mode)) ? TRUE : FALSE;
+}
+
+BOOL file_infoislink(const FLINFO *fli, const char *path) {
+
+	(void)fli;
+	return file_islink(path);
+}
 #endif
 
 void file_catname(char *path, const char *name, int maxlen) {

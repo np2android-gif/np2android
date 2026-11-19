@@ -398,8 +398,16 @@ void hostdrvNT_updateHDrvRoot(void)
 #if !defined(WIN32) && !defined(_WIN32)
 static int hostdrvNT_sfn_wtooem(const WCHAR *src, OEMCHAR *dst, UINT cchDst)
 {
-	return src && dst && cchDst &&
-		WideCharToMultiByte(CP_UTF8, 0, src, -1, dst, (int)cchDst, NULL, NULL) != 0;
+	/* ANDROID-HOSTDRV: ホストのパスは「\」区切りで来るが、短い名前の側 (hostdrvsfn.c) は dosio の
+	 * file_list1st などに渡すので「/」にする (UTF-8 なので 0x5C が 2 バイト文字の一部になることはない) */
+	OEMCHAR *p;
+	if (!(src && dst && cchDst &&
+		WideCharToMultiByte(CP_UTF8, 0, src, -1, dst, (int)cchDst, NULL, NULL) != 0)) return 0;
+	for (p = dst; *p != '\0'; p++)
+	{
+		if (*p == '\\') *p = '/';
+	}
+	return 1;
 }
 static int hostdrvNT_sfn_oemtow(const OEMCHAR *src, WCHAR *dst, UINT cchDst)
 {
