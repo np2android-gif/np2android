@@ -151,5 +151,9 @@ static const SFENTRY np2tbl[] = {
 #if defined(SUPPORT_HOSTDRV)
 	{"HOSTDRV",		0,	STATFLAG_HDRV,	NULL,			0},
 #endif
+#if defined(SUPPORT_HOSTDRVNT)
+	/* ANDROID-HOSTDRV: Windows NT host drive (NP21/W). Written only while it is enabled (statsave.c) */
+	{"HOSTDRVNT",	0,	STATFLAG_HDRVNT,NULL,			0},
+#endif
 	{"TERMINATE",	0,	STATFLAG_TERM,	NULL,			0}};
 

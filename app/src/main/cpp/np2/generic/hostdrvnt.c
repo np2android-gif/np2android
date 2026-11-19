@@ -4289,7 +4289,9 @@ int hostdrvNT_sfsave(STFLAGH sfh, const SFENTRY* tbl)
 	ret = statflag_write(sfh, &sfVersion, sizeof(int));
 	if (ret != STATFLAG_SUCCESS) return ret;
 	ret |= statflag_write(sfh, &hostdrvNT.cmdInvokePos, sizeof(hostdrvNT.cmdInvokePos));
-	for (i = 1; i < NP2HOSTDRVNT_FILES_MAX; i++)
+	/* ANDROID-HOSTDRV: 表を確保していなければ (NT 版を使っていない) 開いているファイルは 0 件。
+	 * statsave.c はそのとき節そのものを書かないが、念のため */
+	for (i = 1; (hostdrvNT.files != NULL) && (i < NP2HOSTDRVNT_FILES_MAX); i++)
 	{
 		if (hostdrvNT.files[i].fileName != NULL)
 		{
@@ -4297,7 +4299,7 @@ int hostdrvNT_sfsave(STFLAGH sfh, const SFENTRY* tbl)
 		}
 	}
 	ret |= statflag_write(sfh, &validDataCount, sizeof(validDataCount));
-	for (i = 1; i < NP2HOSTDRVNT_FILES_MAX; i++)
+	for (i = 1; (hostdrvNT.files != NULL) && (i < NP2HOSTDRVNT_FILES_MAX); i++)
 	{
 		if (hostdrvNT.files[i].fileName != NULL)
 		{
@@ -4344,6 +4346,11 @@ int hostdrvNT_sfsave(STFLAGH sfh, const SFENTRY* tbl)
 	return(ret);
 }
 
+/* ANDROID-HOSTDRV: ステートの中のゲストのパスの長さの上限 (バイト、終端を含む)。IRP_MJ_CREATE は MAX_PATH を
+ * 超える名前を断るので、それより長いものは壊れたステートとみなす。ホストのパスは読み捨てるが、同じく上限を設ける */
+#define HOSTDRVNT_SF_NAMEMAX	((MAX_PATH + 1) * sizeof(WCHAR))
+#define HOSTDRVNT_SF_HOSTMAX	(4096 * sizeof(WCHAR))
+
 int hostdrvNT_sfload(STFLAGH sfh, const SFENTRY* tbl)
 {
 	int	sfVersion = 0;
@@ -4358,34 +4365,69 @@ int hostdrvNT_sfload(STFLAGH sfh, const SFENTRY* tbl)
 	if (ret != STATFLAG_SUCCESS) return ret;
 	if (sfVersion == 0)
 	{
-		statflag_read(sfh, &hostdrvNT.cmdInvokePos, sizeof(hostdrvNT.cmdInvokePos));
-		statflag_read(sfh, &validDataCount, sizeof(validDataCount));
+		/* ANDROID-HOSTDRV: 元は読み込みの失敗、件数・番号の範囲 (負の番号)、名前の長さと終端を確かめず、
+		 * 壊れたステートで表の外や確保した領域の外に書くことがあった。ここで確かめ、だめならロード全体を
+		 * 失敗にする。表を確保していない (NT 版を使っていない) ときは、ファイルを戻さない */
+		if (statflag_read(sfh, &hostdrvNT.cmdInvokePos, sizeof(hostdrvNT.cmdInvokePos)) != STATFLAG_SUCCESS ||
+			statflag_read(sfh, &validDataCount, sizeof(validDataCount)) != STATFLAG_SUCCESS ||
+			validDataCount < 0 || validDataCount >= NP2HOSTDRVNT_FILES_MAX)
+		{
+			return STATFLAG_FAILURE;
+		}
+		if (hostdrvNT.files == NULL)
+		{
+			return ret;
+		}
 		for (k = 0; k < validDataCount; k++)
 		{
 			UINT32 fileNameLength = 0;
 			UINT32 hostFileNameLength = 0;
 			NP2HOSTDRVNT_FILEINFO* fi;
 
-			statflag_read(sfh, &i, sizeof(i));
-			if (i >= NP2HOSTDRVNT_FILES_MAX)
+			if (statflag_read(sfh, &i, sizeof(i)) != STATFLAG_SUCCESS ||
+				i <= 0 || i >= NP2HOSTDRVNT_FILES_MAX)
 			{
 				return STATFLAG_FAILURE;
 			}
+			hostdrvNT_closeFile(i);		// 同じ番号が二度出てきたとき
 			fi = &hostdrvNT.files[i];
 			fi->deleteIdentityValid = 0;
 			fi->deleteVolumeSerialNumber = 0;
 			fi->deleteFileIndexHigh = 0;
 			fi->deleteFileIndexLow = 0;
 
-			statflag_read(sfh, &fileNameLength, sizeof(fileNameLength));
+			if (statflag_read(sfh, &fileNameLength, sizeof(fileNameLength)) != STATFLAG_SUCCESS ||
+				fileNameLength < sizeof(WCHAR) || fileNameLength > HOSTDRVNT_SF_NAMEMAX ||
+				(fileNameLength % sizeof(WCHAR)) != 0)
+			{
+				return STATFLAG_FAILURE;
+			}
 			fi->fileName = (WCHAR*)malloc(fileNameLength);
-			statflag_read(sfh, fi->fileName, fileNameLength);
+			if (fi->fileName == NULL ||
+				statflag_read(sfh, fi->fileName, fileNameLength) != STATFLAG_SUCCESS)
+			{
+				hostdrvNT_closeFile(i);
+				return STATFLAG_FAILURE;
+			}
+			fi->fileName[fileNameLength / sizeof(WCHAR) - 1] = '\0';
 
-			statflag_read(sfh, &hostFileNameLength, sizeof(hostFileNameLength));
+			// ホストのパスはゲストのパスから作り直すので、読み捨てる
+			if (statflag_read(sfh, &hostFileNameLength, sizeof(hostFileNameLength)) != STATFLAG_SUCCESS ||
+				hostFileNameLength > HOSTDRVNT_SF_HOSTMAX)
+			{
+				hostdrvNT_closeFile(i);
+				return STATFLAG_FAILURE;
+			}
 			if (hostFileNameLength > 0)
 			{
-				fi->hostFileName = (WCHAR*)malloc(hostFileNameLength);
-				statflag_read(sfh, fi->hostFileName, hostFileNameLength);
+				char* dummyBuffer = (char*)malloc(hostFileNameLength);
+				int r = (dummyBuffer != NULL) ? statflag_read(sfh, dummyBuffer, hostFileNameLength) : STATFLAG_FAILURE;
+				free(dummyBuffer);
+				if (r != STATFLAG_SUCCESS)
+				{
+					hostdrvNT_closeFile(i);
+					return STATFLAG_FAILURE;
+				}
 			}
 
 			statflag_read(sfh, &fi->isRoot, sizeof(fi->isRoot));
@@ -4398,30 +4440,39 @@ int hostdrvNT_sfload(STFLAGH sfh, const SFENTRY* tbl)
 			statflag_read(sfh, &fi->hostdrvFileAttributes, sizeof(fi->hostdrvFileAttributes));
 			statflag_read(sfh, &fi->deleteOnClose, sizeof(fi->deleteOnClose));
 			statflag_read(sfh, &fi->allowDeleteChild, sizeof(fi->allowDeleteChild));
-			statflag_read(sfh, &fi->extendLength, sizeof(fi->extendLength));
+			if (statflag_read(sfh, &fi->extendLength, sizeof(fi->extendLength)) != STATFLAG_SUCCESS)
+			{
+				hostdrvNT_closeFile(i);
+				return STATFLAG_FAILURE;
+			}
 			if (fi->extendLength > 0)
 			{
 				// ダミーリード
 				char* dummyBuffer = malloc(fi->extendLength);
-				statflag_read(sfh, dummyBuffer, fi->extendLength);
+				int r = (dummyBuffer != NULL) ? statflag_read(sfh, dummyBuffer, fi->extendLength) : STATFLAG_FAILURE;
 				free(dummyBuffer);
+				if (r != STATFLAG_SUCCESS)
+				{
+					hostdrvNT_closeFile(i);
+					return STATFLAG_FAILURE;
+				}
 			}
 			{
 				WCHAR safeHostPath[MAX_PATH];
 				UINT8 safeIsRoot;
-				if (fi->fileName == NULL || hostdrvNT_getHostPath(fi->fileName, safeHostPath, &safeIsRoot, 0) != 0)
+				if (hostdrvNT_getHostPath(fi->fileName, safeHostPath, &safeIsRoot, 0) != 0)
 				{
-					free(fi->fileName);
-					fi->fileName = NULL;
-					if (fi->hostFileName) free(fi->hostFileName);
-					fi->hostFileName = NULL;
+					// ルートの外などを指す名前は戻さない
 					fi->deleteOnClose = 0;
-					fi->deleteIdentityValid = 0;
+					hostdrvNT_closeFile(i);
 					continue;
 				}
-				if (fi->hostFileName) free(fi->hostFileName);
 				fi->hostFileName = (WCHAR*)malloc((wcslen(safeHostPath) + 1) * sizeof(WCHAR));
-				if (fi->hostFileName == NULL) return STATFLAG_FAILURE;
+				if (fi->hostFileName == NULL)
+				{
+					hostdrvNT_closeFile(i);
+					return STATFLAG_FAILURE;
+				}
 				wcscpy(fi->hostFileName, safeHostPath);
 				fi->isRoot = fi->isDirectory ? safeIsRoot : 0;
 				// 同一性保証が難しいのでDeleteフラグは復元しないほうが安全

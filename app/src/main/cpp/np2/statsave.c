@@ -36,6 +36,9 @@
 #include "font/font.h"
 #include "keydisp.h"
 #include "hostdrv.h"
+#if defined(SUPPORT_HOSTDRVNT)
+#include "hostdrvnt.h"	/* ANDROID-HOSTDRV */
+#endif
 #include "calendar.h"
 #include "keystat.h"
 #if defined(CPUCORE_IA32) && defined(USE_FPU) && defined(SUPPORT_FPU_SOFTFLOAT3)
@@ -89,6 +92,9 @@ enum
 	STATFLAG_GIJ,
 #if defined(SUPPORT_HOSTDRV)
 	STATFLAG_HDRV,
+#endif
+#if defined(SUPPORT_HOSTDRVNT)
+	STATFLAG_HDRVNT,	/* ANDROID-HOSTDRV: NP21/W と同じ名前 */
 #endif
 	STATFLAG_MEM,
 	STATFLAG_SXSI
@@ -1242,6 +1248,14 @@ const SFENTRY	*tblterm;
 	tbl = np2tbl;
 	tblterm = tbl + NELEMENTS(np2tbl);
 	while(tbl < tblterm) {
+#if defined(SUPPORT_HOSTDRVNT)
+		/* ANDROID-HOSTDRV: NT 版のホストドライブを使っていないときは節を書かない。a17 までの版は知らない節が
+		 * あるとステートを読めないので、使っていなければ今までどおり行き来できる */
+		if ((tbl->type == STATFLAG_HDRVNT) && ((!np2cfg.hdrvntenable) || (hostdrvNT.files == NULL))) {
+			tbl++;
+			continue;
+		}
+#endif
 		ret |= statflag_createsection(sffh, tbl);
 		switch(tbl->type) {
 			case STATFLAG_BIN:
@@ -1290,6 +1304,11 @@ const SFENTRY	*tblterm;
 #if defined(SUPPORT_HOSTDRV)
 				case STATFLAG_HDRV:
 				ret |= hostdrv_sfsave(&sffh->sfh, tbl);
+				break;
+#endif
+#if defined(SUPPORT_HOSTDRVNT)
+			case STATFLAG_HDRVNT:		/* ANDROID-HOSTDRV */
+				ret |= hostdrvNT_sfsave(&sffh->sfh, tbl);
 				break;
 #endif
 
@@ -1356,6 +1375,9 @@ const SFENTRY	*tblterm;
 #if defined(SUPPORT_HOSTDRV)
 				case STATFLAG_HDRV:
 #endif
+#if defined(SUPPORT_HOSTDRVNT)
+				case STATFLAG_HDRVNT:		/* ANDROID-HOSTDRV */
+#endif
 					ret |= flagcheck_veronly(&sffh->sfh, tbl);
 					break;
 
@@ -1410,6 +1432,11 @@ const SFENTRY	*tblterm;
 	/* ANDROID-HOSTDRV: 開いているファイルを閉じ、マウントを外す (#2)。ステートに hostdrv があれば
 	 * hostdrv_sfload で戻る。無ければ外れたままになる (元は今のファイルが漏れ、今のマウントが残った) */
 	hostdrv_reset();
+#endif
+#if defined(SUPPORT_HOSTDRVNT)
+	/* ANDROID-HOSTDRV: NT 版も同じく、開いているファイルを閉じて初めの状態にする。ステートに HOSTDRVNT の節が
+	 * あれば hostdrvNT_sfload で戻り、無ければ (a17 までのステート、NT 版を使っていないときのステート) 初めのまま */
+	hostdrvNT_reset();
 #endif
 
 	ret |= flagload_common(&sffh->sfh, np2tbl);
@@ -1491,6 +1518,11 @@ const SFENTRY	*tblterm;
 					ret |= hostdrv_sfload(&sffh->sfh, tbl);
 					break;
 #endif
+#if defined(SUPPORT_HOSTDRVNT)
+				case STATFLAG_HDRVNT:		/* ANDROID-HOSTDRV */
+					ret |= hostdrvNT_sfload(&sffh->sfh, tbl);
+					break;
+#endif
 
 				case STATFLAG_MEM:
 					ret |= flagload_mem(&sffh->sfh, tbl);
@@ -1514,6 +1546,12 @@ const SFENTRY	*tblterm;
 	/* ANDROID-HOSTDRV: 今ホストドライブが無効なら、ステートのマウント状態を戻さない (#1) */
 	if (np2cfg.hdrvroot[0] == '\0') {
 		hostdrv_reset();
+	}
+#endif
+#if defined(SUPPORT_HOSTDRVNT)
+	/* ANDROID-HOSTDRV: 今 NT 版を使っていなければ、ステートの NT 版の状態 (開いていたファイル) を戻さない */
+	if (!np2cfg.hdrvntenable) {
+		hostdrvNT_reset();
 	}
 #endif
 

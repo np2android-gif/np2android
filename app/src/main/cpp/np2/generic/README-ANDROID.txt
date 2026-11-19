@@ -87,7 +87,16 @@ Android 向けの変更 (変更箇所には /* ANDROID-HOSTDRV */ の印を付�
     hdrvenable・hdrvntenable を入れて hostdrvNT_updateHDrvRoot を呼ぶ (権限も次の要求から効く)。
     無効にしたときは hostdrvNT_reset で開いているファイルを閉じる。
 
+  - ステート (statsave.tbl・statsave.c。形は NP21/W の HOSTDRVNT 節の版 0 のまま)
+    NT 版を使っているとき (hdrvntenable で、表を確保してある) だけ HOSTDRVNT の節を書く。a17 までの版は
+    知らない節があるとステートを読めないので、使っていなければ今までどおり行き来できる。
+    statsave_load の初めに hostdrvNT_reset を呼ぶ (節が無いステートでも、前の状態が残らない)。
+    終わりで NT 版を使っていなければ、もう一度 hostdrvNT_reset を呼ぶ (DOS 版の #1 と同じ)。
+    hostdrvNT_sfload: 読み込みの失敗、件数と番号の範囲 (元は負の番号を確かめず表の外に書けた)、名前の長さと
+      終端を確かめ、だめならロード全体を失敗にする。ホストのパスは読み捨て、ゲストのパスから作り直す (元と同じ)。
+      表を確保していなければファイルを戻さない。
+    NP21/W と同じく、「閉じたら消す」予約はステートに保存せず、セーブした時点で外れる。
+
 まだ入れていないもの
-  - ステート (NP21/W の HOSTDRVNT 節)。今はステートに保存せず、ロードしても NT 版の状態は戻らない。
   - 短い名前の本当の実装 (NP21/W の hostdrvs.c の該当部分と、sdl2/dosio の file_getinfo など 4 関数)。
   - 「削除・名前の変更を許可」の設定 (np2bridge は削除のビットを受け取れるが、Kotlin は常に false を渡す)。
