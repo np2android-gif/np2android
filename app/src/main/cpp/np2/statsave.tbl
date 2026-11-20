@@ -108,6 +108,9 @@ static const SFENTRY np2tbl[] = {
 	{"EGC",			0,	STATFLAG_EGC,	NULL,			0},
 	{"EPSON",		0,	STATFLAG_EPSON,	NULL,			0},
 	{"FDC",			0,	STATFLAG_BIN,	&fdc,			sizeof(fdc)},
+	/* ANDROID-FDC: NP21/W FDC interrupt delay etc., kept out of _FDC so the FDC section stays as in a18.
+	 * Missing in older states: stays zero (fdc_reset). */
+	{"FDCINT",		0,	STATFLAG_BIN,	&fdcint,		sizeof(fdcint)},
 	{"EMSIO",		0,	STATFLAG_BIN,	&emsio,			sizeof(emsio)},
 	{"GDC1",		0,	STATFLAG_BIN,	&gdc,			sizeof(gdc)},
 	{"GDC2",		0,	STATFLAG_BIN,	&gdcs,			sizeof(gdcs)},

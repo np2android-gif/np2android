@@ -105,6 +105,17 @@ typedef struct {
 	UINT8	buf[0x8000];
 } _FDC, *FDC;
 
+/* ANDROID-FDC: NP21/W rev107 の _FDC に足された int_timer・int_stat (SEEK と RECALIBRATE の割り込みを遅らせる) と、
+ * fdc.c の fdc_lasttreg。_FDC に入れるとステートの FDC の節の大きさが変わり、a18 までのステートを読めなくなるので、
+ * 別にしてステートの FDCINT の節で保存する */
+typedef struct {
+	UINT8	int_timer[4];
+	UINT8	int_stat[4];
+	UINT8	lasttreg[4];
+} _FDCINT;
+
+extern	_FDCINT	fdcint;
+
 
 #ifdef __cplusplus
 extern "C" {
@@ -125,6 +136,8 @@ void fdcsend_success7(void);
 
 void fdc_reset(const NP2CFG *pConfig);
 void fdc_bind(void);
+
+void fdc_intdelay(void);		/* ANDROID-FDC: NP21/W と同じく pccore.c からフレームごとに呼ぶ */
 
 #ifdef __cplusplus
 }

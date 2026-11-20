@@ -26,3 +26,47 @@ I/O ポートを 16 ビットで見分ける (np2cfg.sysiomsk)
   - I/O の表は起動・リセット・ステートロードで作り直すので、切り替えはその時から効く。
     設定画面の説明に「切り替えたら、ゲストをリセットしてください」と書いている。
     np2cfg はステートに入らないので、ステートの構造は変わらない。
+
+
+FDC (fdc.c・fdc.h) と DMA の番地の上位 (dmac.c)
+================================================
+
+Windows NT/2000 の FD ドライバは、FDC と DMA を直接動かす (DOS は互換 BIOS の INT 1Bh を通るので、
+FDC のポートも DMA も使わない)。xnp2 のままでは次の 3 つのために、Windows 2000 から FD が読めず、
+セットアップのブートディスクからも STOP 0x7B で起動できなかった (Q11 指示書 5章)。
+  1. DMA の番地の 24〜31 ビット (0E05h〜0E0Bh) が無い。Windows 2000 は FD のバッファを 16MB より上に
+     置くので、16MB より下の別の場所に転送していた (読めないうえ、そこにあるメモリを上書きしていた)。
+  2. FDC を 94h でリセットしても割り込みを上げない (ドライバは待ちきれずに「準備ができていません」にする)。
+  3. READ DATA が EOT・TC で終わったときの結果の C/H/R が実機と違う (ドライバが読み直しを繰り返し、
+     メディアを認識できない)。
+
+fdc.c・fdc.h (印 ANDROID-FDC)
+  - Neko Project 21/W rev107 の io/fdc.c に置き換えた (「170101 ST modified to work on Windows 9x/2000」
+    などの直しが入った版。ライセンスは NP21/W の修正 BSD、assets/licenses/np21w.txt)。
+    文字コードは元のまま (Shift_JIS、LF)。
+  - 前の fdc.c にあった Android 向けの足し分は、どれも NP2kai から移した SUPPORT_KAI_IMAGES の部分
+    (fdcsend_success7 の FD イメージのリザルトコード、NFD r1 の READ DIAGNOSTIC (fdc_diag_nfd1_mode)、
+    SCAN EQUAL、fdc_reset での初期化) で、NP21/W の版にも同じ処理で入っている。
+    前の版で省いていた fdc_lasttreg (Windows 用、SEEK の後で treg を C に合わせる) は入った。
+  - 元からの違い:
+    インクルードは "fdd/fddfile.h" (この版の場所。中身は np2kai の diskimage/fddfile.h)。
+    シーク音 (SUPPORT_SWSEEKSND・np2cfg.MOTOR の部分) は外した。
+    NP21/W で _FDC に足された int_timer・int_stat と、fdc_lasttreg は、_FDC の外の fdcint (_FDCINT) に置いた。
+    _FDC の形は前のままなので、ステートの FDC の節は前と同じ大きさ。fdcint はステートの FDCINT の節で
+    保存し、この節の無いステート (a18 まで) では fdc_reset の 0 のまま始まる。新しい版で保存したステートは、
+    知らない節があるので a18 までの版では読めない。
+  - fdc_intdelay (SEEK・RECALIBRATE・リセットの割り込みを 6 フレーム、約 100ms 遅らせて上げる) を、NP21/W と
+    同じく pccore.c の pccore_exec の終わりから呼ぶ。エミュレートしている機械のフレームで数えるので、端末の
+    速さ・ウェイトの設定・一時停止には左右されない (止めている間は進まない)。
+  - diskimage/ が使う fdc の値 (us・hd・C・H・R・N・mf・rpm・crcn・treg・chgreg など) の意味は変わらない
+    (NP21/W も同じ np2kai 系の diskimage を使っている)。FDC の SEEK・RECALIBRATE は fdd_seek を呼ばず、
+    treg を直接決める (NP21/W と同じ)。BIOS (bios1b.c) は前のまま。
+
+dmac.c (印 ANDROID-FDC、IA-32 構成だけ)
+  - 0E05h・0E07h・0E09h・0E0Bh (チャネル 0〜3) に、DMA の番地の 24〜31 ビットを入れる (NP21/W rev107 の
+    dmac_oe05)。21h〜27h (バンク、16〜23 ビット) を書いたら 24〜31 ビットを 0 に戻す (NP21/W の dmac_o21)。
+  - 番地は今までの adrs (32 ビット) の上位バイトに入るので、ステートの DMAC の節の形は変わらない。
+    今までは上位バイトは常に 0 だった。0E05h〜0E0Bh を書かないゲスト (DOS など) では何も変わらない。
+  - 他に DMA を使うもの: SASI (IA-32 構成には無い)、PCM 音源 (cs4231、dmac_getdatas で同じ adrs を使う)。
+    NT 系のゲストが音源のチャネルに 0E0xh を書けば、そちらも正しい番地になる。IDE は DMA を使わない。
+  - NP21/W の dmac.c のほかの違い (1Dh、11h を読んだら TC を落とす、など) は取り込んでいない。

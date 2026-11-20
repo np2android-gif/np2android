@@ -1,13 +1,24 @@
 //
 // FDC μPD765A
 //
-
+// ANDROID-FDC: Neko Project 21/W rev107 の io/fdc.c を取り込んだもの (Windows NT/2000 の FD ドライバが動くように)。
+// 元からの違い (印 ANDROID-FDC): インクルードの場所、シーク音を外した、SEEK・RECALIBRATE の割り込み待ちと
+// fdc_lasttreg を _FDC の外の fdcint に置いた (ステートの FDC の節の形を変えないため。別の節 FDCINT で保存する)。
 
 #include	"compiler.h"
 #include	"cpucore.h"
 #include	"pccore.h"
 #include	"iocore.h"
-#include	"fdd/fddfile.h"
+#include	"fdd/fddfile.h"		/* ANDROID-FDC: この版の場所 (中身は np2kai の diskimage/fddfile.h) */
+
+#if 1
+#undef	TRACEOUT
+#define	TRACEOUT(s)	(void)(s)
+#endif	/* 0 */
+
+/* ANDROID-FDC: 元の fdc_lasttreg[4] (Win 用。Seek 後には treg を fdc.C で更新) と、_FDC にあった int_timer・int_stat は
+ * fdcint に置く (fdc.h)。ステートには FDCINT の節で入る。a18 までのステートには無いので、fdc_reset の 0 のまま */
+_FDCINT fdcint;
 
 enum {
 	FDC_DMACH2HD	= 2,
@@ -22,9 +33,10 @@ static const UINT8 FDCCMD_TABLE[32] = {
 #define FDC_FORCEREADY (1)
 #define	FDC_DELAYERROR7
 
+#define FDC_INT_DELAY		6			/*!< Delay 100ms */
 
 void fdc_intwait(NEVENTITEM item) {
-
+	
 	if (item->flag & NEVENT_SETEVENT) {
 		fdc.intreq = TRUE;
 		if (fdc.chgreg & 1) {
@@ -37,7 +49,7 @@ void fdc_intwait(NEVENTITEM item) {
 }
 
 void fdc_interrupt(void) {
-
+	
 	nevent_set(NEVENT_FDCINT, 512, fdc_intwait, NEVENT_ABSOLUTE);
 }
 
@@ -91,7 +103,9 @@ void fdcsend_error7(void) {
 	fdc.buf[4] = fdc.H;
 	fdc.buf[5] = fdc.R;
 	fdc.buf[6] = fdc.N;
-	fdc.status = FDCSTAT_RQM | FDCSTAT_CB | FDCSTAT_DIO;
+	fdc.status &= 0x0f;
+	fdc.status |= (1 << fdc.us);
+	fdc.status |= FDCSTAT_RQM | FDCSTAT_CB | FDCSTAT_DIO;
 	fdc.stat[fdc.us] = 0;										// ver0.29
 	fdc_dmaready(0);
 	dmac_check();
@@ -104,14 +118,15 @@ void fdcsend_success7(void) {
 	fdc.event = FDCEVENT_BUFSEND;
 	fdc.bufp = 0;
 	fdc.bufcnt = 7;
-#ifdef SUPPORT_KAI_IMAGES	/* ANDROID: np2kai から移植 */
+#ifdef SUPPORT_KAI_IMAGES
 	if (fdd_fdcresult() == FALSE) {
 		fdc.buf[0] = (fdc.hd << 2) | fdc.us;
 		fdc.buf[1] = 0;
 		fdc.buf[2] = 0;
 	}
 	else {
-		/* FD イメージが FDC のリザルトコードを持っている場合 (fdc.stat に設定済み) はそれを返す */
+		//	FDイメージファイルがFDCリザルトコードを持っている場合は
+		//	(fdc.statに設定しているはずなので)そちらを設定
 		fdc.buf[0] = (fdc.hd << 2) | fdc.us | (UINT8)(fdc.stat[fdc.us] >>  0);
 		fdc.buf[1] = (UINT8)(fdc.stat[fdc.us] >>  8);
 		fdc.buf[2] = (UINT8)(fdc.stat[fdc.us] >> 16);
@@ -125,7 +140,9 @@ void fdcsend_success7(void) {
 	fdc.buf[4] = fdc.H;
 	fdc.buf[5] = fdc.R;
 	fdc.buf[6] = fdc.N;
-	fdc.status = FDCSTAT_RQM | FDCSTAT_CB | FDCSTAT_DIO;
+	fdc.status &= 0x0f;
+	fdc.status |= (1 << fdc.us);
+	fdc.status |= FDCSTAT_RQM | FDCSTAT_CB | FDCSTAT_DIO;
 	fdc.stat[fdc.us] = 0;										// ver0.29
 	fdc_dmaready(0);
 	dmac_check();
@@ -152,12 +169,14 @@ static void fdc_timeoutset(void) {
 
 static BOOL FDC_DriveCheck(BOOL protectcheck) {
 
-	if (!fddfile[fdc.us].fname[0]) {
+//	if (!fddfile[fdc.us].fname[0]) {
+	if (!fdd_diskready(fdc.us)) {
 		fdc.stat[fdc.us] = FDCRLT_IC0 | FDCRLT_NR | (fdc.hd << 2) | fdc.us;
 		fdcsend_error7();
 		return(FALSE);
 	}
-	else if ((protectcheck) && (fddfile[fdc.us].protect)) {
+//	else if ((protectcheck) && (fddfile[fdc.us].protect)) {
+	else if ((protectcheck) && fdd_diskprotect(fdc.us)) {
 		fdc.stat[fdc.us] = FDCRLT_IC0 | FDCRLT_NW | (fdc.hd << 2) | fdc.us;
 		fdcsend_error7();
 		return(FALSE);
@@ -197,225 +216,27 @@ static void get_eotgsldtl(void) {
 
 // --------------------------------------------------------------------------
 
+static void readsector(void);
+static void FDC_ReadData(void);
+
 static void FDC_Invalid(void) {							// cmd: xx
 
 	fdc.event = FDCEVENT_BUFSEND;
 	fdc.bufcnt = 1;
 	fdc.bufp = 0;
 	fdc.buf[0] = 0x80;
-	fdc.status = FDCSTAT_RQM | FDCSTAT_CB | FDCSTAT_DIO;
+	fdc.status &= 0x0f;
+	fdc.status |= FDCSTAT_RQM | FDCSTAT_CB | FDCSTAT_DIO;
 }
 
-#if 0
-static void FDC_ReadDiagnostic(void) {					// cmd: 02
-
-	switch(fdc.event) {
-		case FDCEVENT_CMDRECV:
-			get_hdus();
-			get_chrn();
-			get_eotgsldtl();
-			fdc.stat[fdc.us] = (fdc.hd << 2) | fdc.us;
-
-			if (FDC_DriveCheck(FALSE)) {
-				fdc.event = FDCEVENT_BUFSEND;
-//				fdc.bufcnt = makedianosedata();
-				fdc.bufp = 0;
-			}
-			break;
-
-		default:
-			fdc.event = FDCEVENT_NEUTRAL;
-			break;
-	}
-}
-#endif
-
-static void FDC_Specify(void) {							// cmd: 03
-
-	switch(fdc.event) {
-		case FDCEVENT_CMDRECV:
-			fdc.srt = fdc.cmds[0] >> 4;
-			fdc.hut = fdc.cmds[0] & 0x0f;
-			fdc.hlt = fdc.cmds[1] >> 1;
-			fdc.nd = fdc.cmds[1] & 1;
-			fdc.stat[fdc.us] = (fdc.hd << 2) | fdc.us;
-			break;
-	}
-	fdc.event = FDCEVENT_NEUTRAL;
-	fdc.status = FDCSTAT_RQM;
-}
-
-static void FDC_SenseDeviceStatus(void) {				// cmd: 04
-
-	switch(fdc.event) {
-		case FDCEVENT_CMDRECV:
-			get_hdus();
-			fdc.buf[0] = (fdc.hd << 2) | fdc.us;
-			fdc.stat[fdc.us] = (fdc.hd << 2) | fdc.us;
-			if (fdc.equip & (1 << fdc.us)) {
-				fdc.buf[0] |= 0x08;
-				if (!fdc.treg[fdc.us]) {
-					fdc.buf[0] |= 0x10;
-				}
-				if (fddfile[fdc.us].fname[0]) {
-					fdc.buf[0] |= 0x20;
-				}
-				if (fddfile[fdc.us].protect) {
-					fdc.buf[0] |= 0x40;
-				}
-			}
-			else {
-				fdc.buf[0] |= 0x80;
-			}
-//			TRACEOUT(("FDC_SenseDeviceStatus %.2x", fdc.buf[0]));
-			fdc.event = FDCEVENT_BUFSEND;
-			fdc.bufcnt = 1;
-			fdc.bufp = 0;
-			fdc.status = FDCSTAT_RQM | FDCSTAT_CB | FDCSTAT_DIO;
-			break;
-
-		default:
-			fdc.event = FDCEVENT_NEUTRAL;
-			fdc.status = FDCSTAT_RQM;
-			break;
-	}
-}
-
-static BRESULT writesector(void) {
-
-	fdc.stat[fdc.us] = (fdc.hd << 2) | fdc.us;
-	if (!FDC_DriveCheck(TRUE)) {
-		return(FAILURE);
-	}
-	if (fdd_write()) {
-		fdc.stat[fdc.us] = fdc.us | (fdc.hd << 2) | FDCRLT_IC0 | FDCRLT_ND;
-		fdcsend_error7();
-		return(FAILURE);
-	}
-	fdc.event = FDCEVENT_BUFRECV;
-	fdc.bufcnt = 128 << fdc.N;
-	fdc.bufp = 0;
-	fdc.status = FDCSTAT_RQM | FDCSTAT_NDM | FDCSTAT_CB;
-	fdc_dmaready(1);
-	dmac_check();
-	return(SUCCESS);
-}
-
-static void FDC_WriteData(void) {						// cmd: 05
-														// cmd: 09
-	switch(fdc.event) {
-		case FDCEVENT_CMDRECV:
-			get_hdus();
-			get_chrn();
-			get_eotgsldtl();
-			fdc.stat[fdc.us] = (fdc.hd << 2) | fdc.us;
-			if (FDC_DriveCheck(TRUE)) {
-				fdc.event = FDCEVENT_BUFRECV;
-				fdc.bufcnt = 128 << fdc.N;
-				fdc.bufp = 0;
-#if 1															// ver0.27 ??
-				fdc.status = FDCSTAT_NDM | FDCSTAT_CB;
-				if (!(fdc.ctrlreg & 0x10)) {
-					fdc.status |= FDCSTAT_RQM;
-				}
-#else
-				fdc.status = FDCSTAT_RQM | FDCSTAT_NDM | FDCSTAT_CB;
-#endif
-				fdc_dmaready(1);
-				dmac_check();
-			}
-			break;
-
-		case FDCEVENT_BUFRECV:
-			if (writesector()) {
-				return;
-			}
-			if (fdc.tc) {
-				fdcsend_success7();
-				return;
-			}
-			if (fdc.R++ == fdc.eot) {
-				fdc.stat[fdc.us] = fdc.us | (fdc.hd << 2) |
-													FDCRLT_IC0 | FDCRLT_EN;
-				fdcsend_error7();
-				break;
-			}
-			break;
-
-		default:
-			fdc.event = FDCEVENT_NEUTRAL;
-			fdc.status = FDCSTAT_RQM;
-			break;
-	}
-}
-
-static void readsector(void) {
-
-	fdc.stat[fdc.us] = (fdc.hd << 2) | fdc.us;
-	if (!FDC_DriveCheck(FALSE)) {
-		return;
-	}
-	if (fdd_read()) {
-		fdc.stat[fdc.us] = fdc.us | (fdc.hd << 2) | FDCRLT_IC0 | FDCRLT_ND;
-		fdcsend_error7();
-		return;
-	}
-
-	fdc.event = FDCEVENT_BUFSEND2;
-	fdc.bufp = 0;
-#if 1															// ver0.27 ??
-	fdc.status = FDCSTAT_NDM | FDCSTAT_CB;
-	if (!(fdc.ctrlreg & 0x10)) {
-		fdc.status |= FDCSTAT_RQM | FDCSTAT_DIO;
-	}
-#else
-	fdc.status = FDCSTAT_RQM | FDCSTAT_DIO | FDCSTAT_NDM | FDCSTAT_CB;
-#endif
-	fdc_dmaready(1);
-	dmac_check();
-}
-
-static void FDC_ReadData(void) {						// cmd: 06
-														// cmd: 0c
-	switch(fdc.event) {
-		case FDCEVENT_CMDRECV:
-			get_hdus();
-			get_chrn();
-			get_eotgsldtl();
-			readsector();
-			break;
-
-		case FDCEVENT_NEXTDATA:
-			fdc.bufcnt = 0;
-			if (fdc.R++ == fdc.eot) {
-				fdc.stat[fdc.us] = fdc.us | (fdc.hd << 2) |
-													FDCRLT_IC0 | FDCRLT_EN;
-				fdcsend_error7();
-				break;
-			}
-			readsector();
-			break;
-
-#ifdef FDC_DELAYERROR7
-		case FDCEVENT_BUSY:
-			break;
-#endif
-
-		default:
-			fdc.event = FDCEVENT_NEUTRAL;
-			fdc.status = FDCSTAT_RQM;
-			break;
-	}
-}
-
-#ifdef SUPPORT_KAI_IMAGES	/* ANDROID: np2kai から移植 (シーク音・fdc_lasttreg はこの版に無いので省いた) */
+#ifdef SUPPORT_KAI_IMAGES
 static BOOL fdc_diag_nfd1_mode;
 
 static BOOL fdc_nfd1_diag_target(void) {
 
 	UINT	drv;
 
-	/* get_hdus() 前なので、FDC の状態を変えずにコマンドバイトから対象ドライブを得る */
+	//	get_hdus()前なので、FDC状態を変更せずコマンドバイトから対象ドライブを得る
 	drv = fdc.cmds[0] & 3;
 	return(fddfile[drv].type == DISKTYPE_NFD &&
 		fddfile[drv].inf.nfd.revision);
@@ -423,20 +244,29 @@ static BOOL fdc_nfd1_diag_target(void) {
 
 static void fdc_nfd1_diag_ready(void) {
 
-	/* readsector() の転送開始と同じ */
+
 	fdc.event = FDCEVENT_BUFSEND2;
 	fdc.bufp = 0;
+#if 0
 	fdc.status = FDCSTAT_NDM | FDCSTAT_CB;
 	if (!(fdc.ctrlreg & 0x10)) {
 		fdc.status |= FDCSTAT_RQM | FDCSTAT_DIO;
 	}
+#else
+	fdc.status &= 0x0f;
+	fdc.status |= (1 << fdc.us);
+	fdc.status |= FDCSTAT_RQM | FDCSTAT_DIO | FDCSTAT_CB;
+	if (fdc.nd) {
+		fdc.status |= FDCSTAT_NDM;
+	}
+#endif
 	fdc_dmaready(1);
 	dmac_check();
 }
 
 static void FDC_ReadDiagnostic(void) {					// cmd: 02
 
-	/* コマンド開始時に NFD r1 かを確認。NFD r1 以外は従来どおり READ DATA として扱う */
+	//	コマンド開始時にNFD r1かを確認　NFD以外は従来のREAD DATA
 	if (fdc.event == FDCEVENT_CMDRECV) {
 		fdc_diag_nfd1_mode = fdc_nfd1_diag_target();
 	}
@@ -450,6 +280,9 @@ static void FDC_ReadDiagnostic(void) {					// cmd: 02
 			get_hdus();
 			get_chrn();
 			get_eotgsldtl();
+			if (fdcint.lasttreg[fdc.us] != fdc.treg[fdc.us]) {
+				fdc.treg[fdc.us] = fdc.C;
+			}
 			fdc.stat[fdc.us] = (fdc.hd << 2) | fdc.us;
 			if (!FDC_DriveCheck(FALSE)) {
 				fdc_diag_nfd1_mode = FALSE;
@@ -459,7 +292,7 @@ static void FDC_ReadDiagnostic(void) {					// cmd: 02
 				fdc_nfd1_diag_ready();
 				break;
 			}
-			/* 0xc0 は特殊読み込み情報なし。従来の READ DATA へ切り替える */
+			//	0xc0は特殊読み込み情報無し。従来のREAD DATAへ切り替える
 			if (fddlasterror == 0xc0) {
 				fdc_diag_nfd1_mode = FALSE;
 				FDC_ReadData();
@@ -482,43 +315,293 @@ static void FDC_ReadDiagnostic(void) {					// cmd: 02
 			break;
 	}
 }
+#endif
 
-static void FDC_ScanEqual(void) {						// cmd: 11, 19, 1d
+static void FDC_Specify(void) {							// cmd: 03
 
+	switch(fdc.event) {
+		case FDCEVENT_CMDRECV:
+			fdc.srt = fdc.cmds[0] >> 4;
+			fdc.hut = fdc.cmds[0] & 0x0f;
+			fdc.hlt = fdc.cmds[1] >> 1;
+			fdc.nd = fdc.cmds[1] & 1;
+			//fdc.stat[fdc.us] = (fdc.hd << 2) | fdc.us;
+			break;
+	}
+	fdc.event = FDCEVENT_NEUTRAL;
+	fdc.status &= 0x0f;
+	fdc.status |= FDCSTAT_RQM;
+}
+
+static void FDC_SenseDeviceStatus(void) {				// cmd: 04
+
+	switch (fdc.event) {
+		case FDCEVENT_CMDRECV:
+			get_hdus();
+			fdc.buf[0] = (fdc.hd << 2) | fdc.us;
+			//fdc.stat[fdc.us] = (fdc.hd << 2) | fdc.us;
+			//fdc.stat[fdc.us] = fdc.us;
+			if (fdc.equip & (1 << fdc.us)) {
+				fdc.buf[0] |= 0x08;
+				if (!fdc.treg[fdc.us]) {
+					fdc.buf[0] |= 0x10;
+				}
+				if (fdd_diskready(fdc.us) || (fdc.ctrlreg & 0x40)) {/* 170107 念のため */
+					fdc.buf[0] |= 0x20;
+				}
+				if (fddfile[fdc.us].protect) {
+					fdc.buf[0] |= 0x40;
+				}
+			}
+			else {
+				fdc.buf[0] |= 0x80;
+			}
+//			TRACEOUT(("FDC_SenseDeviceStatus %.2x", fdc.buf[0]));
+			fdc.event = FDCEVENT_BUFSEND;
+			fdc.bufcnt = 1;
+			fdc.bufp = 0;
+			fdc.status &= 0x0f;
+			fdc.status |= (1 << fdc.us);
+			fdc.status |= FDCSTAT_RQM | FDCSTAT_CB | FDCSTAT_DIO;
+			break;
+
+		default:
+			fdc.event = FDCEVENT_NEUTRAL;
+			fdc.status &= 0x0f;
+			fdc.status |= FDCSTAT_RQM;
+			break;
+	}
+}
+
+static BRESULT writesector(void) {
+
+	fdc.stat[fdc.us] = (fdc.hd << 2) | fdc.us;
+	if (!FDC_DriveCheck(TRUE)) {
+		return(FAILURE);
+	}
+	if (fdd_write()) {
+		fdc.stat[fdc.us] = fdc.us | (fdc.hd << 2) | FDCRLT_IC0 | FDCRLT_ND;
+		fdcsend_error7();
+		return(FAILURE);
+	}
+	fdc.event = FDCEVENT_BUFRECV;
+	fdc.bufcnt = 128 << fdc.N;
+	fdc.bufp = 0;
+//	fdc.status = FDCSTAT_RQM | FDCSTAT_NDM | FDCSTAT_CB;
+	fdc_dmaready(1);
+	dmac_check();
+	return(SUCCESS);
+}
+
+static void FDC_WriteData(void) {						// cmd: 05
+														// cmd: 09
 	switch(fdc.event) {
 		case FDCEVENT_CMDRECV:
 			get_hdus();
 			get_chrn();
-			fdc.eot = fdc.cmds[5];
-			fdc.gpl = fdc.cmds[6];
-			fdc.stp = fdc.cmds[7];
+			get_eotgsldtl();
+			fdc.stat[fdc.us] = (fdc.hd << 2) | fdc.us;
+			if(fdcint.lasttreg[fdc.us] != fdc.treg[fdc.us]){
+				fdc.treg[fdc.us] = fdc.C;	/* 170101 ST modified to work on Windows 9x/2000 */
+			}
+			if (FDC_DriveCheck(TRUE)) {
+				fdc.event = FDCEVENT_BUFRECV;
+				fdc.bufcnt = 128 << fdc.N;
+				fdc.bufp = 0;
+#if 1															// ver0.27 ??
+				fdc.status &= 0x0f;
+				fdc.status |= (1 << fdc.us);
+				fdc.status |= FDCSTAT_RQM | FDCSTAT_CB;
+				if (fdc.nd) {
+					fdc.status |= FDCSTAT_NDM;
+				}
+#else
+				fdc.status = FDCSTAT_RQM | FDCSTAT_NDM | FDCSTAT_CB;
+#endif
+				fdc_dmaready(1);
+				dmac_check();
+			}
+			break;
+
+		case FDCEVENT_BUFRECV:
+			if (writesector()) {
+				return;
+			}
+			/* 170101 ST modified to work on Windows 9x/2000 form ... */
+			//if (fdc.tc) {
+			//	fdcsend_success7();
+			//	return;
+			//}
+			if ((fdc.tc) || (fdc.R++ == fdc.eot)) {
+				fdc.R = 1;
+				if (fdc.mt) {
+					fdc.hd ^= 1;
+					fdc.stat[fdc.us] = (fdc.hd << 2) | fdc.us;
+					fdc.H ^= 1;
+					if (fdc.tc || !fdc.H) {
+						fdc.C++;
+						fdcsend_success7();
+						break;
+					}
+				}
+				else {
+					fdc.C++;
+					fdcsend_success7();
+				}
+				//fdc.stat[fdc.us] = fdc.us | (fdc.hd << 2) |
+				//									FDCRLT_IC0 | FDCRLT_EN;
+				//fdcsend_error7();
+				break;
+			}
+			/* 170101 ST modified to work on Windows 9x/2000 ... to */
+			break;
+
+		default:
+			fdc.event = FDCEVENT_NEUTRAL;
+			fdc.status &= 0x0f;
+			fdc.status |= FDCSTAT_RQM;
 			break;
 	}
 }
+
+static void readsector(void) {
+
+	fdc.stat[fdc.us] = (fdc.hd << 2) | fdc.us;
+	if (!FDC_DriveCheck(FALSE)) {
+		return;
+	}
+	if (fdd_read()) {
+		fdc.stat[fdc.us] = fdc.us | (fdc.hd << 2) | FDCRLT_IC0 | FDCRLT_ND;
+		fdcsend_error7();
+		return;
+	}
+
+	fdc.event = FDCEVENT_BUFSEND2;
+	fdc.bufp = 0;
+#if 0															// ver0.27 ??
+	fdc.status = FDCSTAT_NDM | FDCSTAT_CB;
+	if (!(fdc.ctrlreg & 0x10)) {
+		fdc.status |= FDCSTAT_RQM | FDCSTAT_DIO;
+	}
+#else
+	fdc.status &= 0x0f;
+	fdc.status |= (1 << fdc.us);
+	fdc.status |= FDCSTAT_RQM | FDCSTAT_DIO | FDCSTAT_CB;
+	if (fdc.nd) {
+		fdc.status |= FDCSTAT_NDM;
+	}
 #endif
+	fdc_dmaready(1);
+	dmac_check();
+}
+
+static void FDC_ReadData(void) {						// cmd: 06
+														// cmd: 0c
+	switch(fdc.event) {
+		case FDCEVENT_CMDRECV:
+			get_hdus();
+			get_chrn();
+			get_eotgsldtl();
+			if(fdcint.lasttreg[fdc.us] != fdc.treg[fdc.us]){
+				fdc.treg[fdc.us] = fdc.C;	/* 170101 ST modified to work on Windows 9x/2000 */
+			}
+			readsector();
+			break;
+
+		case FDCEVENT_NEXTDATA:
+			fdc.bufcnt = 0;
+			if (fdc.R++ == fdc.eot) {
+				/* 170101 ST modified to work on Windows 9x/2000 form ... */
+				fdc.R = 1;
+				if (fdc.mt) {
+					fdc.hd ^= 1;
+					fdc.H ^= 1;
+					if (fdc.H) {
+						readsector();
+						break;
+					}
+				}
+				fdc.C++;
+				fdcsend_success7();
+				//fdc.stat[fdc.us] = fdc.us | (fdc.hd << 2) |
+				//									FDCRLT_IC0 | FDCRLT_EN;
+				//fdcsend_error7();
+				break;
+				/* 170101 ST modified to work on Windows 9x/2000 ... to */
+			}
+			readsector();
+			break;
+
+#ifdef FDC_DELAYERROR7
+		case FDCEVENT_BUSY:
+			break;
+#endif
+
+		default:
+			fdc.event = FDCEVENT_NEUTRAL;
+			fdc.status &= 0x0f;
+			fdc.status |= FDCSTAT_RQM;
+			break;
+	}
+}
 
 static void FDC_Recalibrate(void) {						// cmd: 07
 
 	switch(fdc.event) {
 		case FDCEVENT_CMDRECV:
 			get_hdus();
-			fdc.ncn = 0;
-			fdc.stat[fdc.us] = (fdc.hd << 2) | fdc.us;
-			fdc.stat[fdc.us] |= FDCRLT_SE;
+//			fdc.ncn = 0;
+//			fdc.R = 1;						/* 170107 for Windows95 */
+//			fdc.crcn = fdc.R;				/* 170107 for Windows95 */
+			fdcint.int_stat[fdc.us] = /* (fdc.hd << 2) | */ fdc.us;
+			fdcint.int_stat[fdc.us] |= FDCRLT_SE;
 			if (!(fdc.equip & (1 << fdc.us))) {
-				fdc.stat[fdc.us] |= FDCRLT_NR | FDCRLT_IC0;
+				fdcint.int_stat[fdc.us] |= FDCRLT_IC0;
+				if (!(fdc.ctrlreg & 0x40)) {
+					// 強制ReadyでなければNR
+					fdcint.int_stat[fdc.us] |= FDCRLT_NR;
+				}
+				else {
+					// 強制ReadyならばNRは立たないがECが立つ(sector0が見つからないので)
+					fdcint.int_stat[fdc.us] |= FDCRLT_EC;
+				}
 			}
-			else if (!fddfile[fdc.us].fname[0]) {
-				fdc.stat[fdc.us] |= FDCRLT_NR;
+			else if (!fdd_diskready(fdc.us)) {
+				// Win95, 98用
+				fdc.ncn = 0;
+				fdc.R = 1;						/* 170107 for Windows95 */
+				fdc.crcn = fdc.R;				/* 170107 for Windows95 */
+				if (fdc.ctrlreg & 0x40) {
+					fdc.treg[fdc.us] = fdc.ncn;
+				}else{
+					fdcint.int_stat[fdc.us] |= FDCRLT_NR;
+				}
 			}
 			else {
-				fdd_seek();
+				fdc.ncn = 0;
+				fdc.treg[fdc.us] = fdc.ncn;
+				fdc.R = 1;						/* 170107 for Windows95 */
+				fdc.crcn = fdc.R;				/* 170107 for Windows95 */
+				/* 170107 for Windows95 form ... */
+//				if (fdd_seek()) {
+//					fdc.stat[fdc.us] |= FDCRLT_IC0;
+				/* ANDROID-FDC: ここにあったシーク音は外した */
+//				}
+				/* 170107 for Windows95 ... to */
 			}
-			fdc_interrupt();
+			fdcint.int_timer[fdc.us] = FDC_INT_DELAY;
+			fdc.status &= 0x0f;
+			fdc.status |= (1 << fdc.us);
+
+//			fdc_interrupt();
 			break;
+//		default:
+//		fdc_interrupt();
+//		break;
 	}
 	fdc.event = FDCEVENT_NEUTRAL;
-	fdc.status = FDCSTAT_RQM;
+	fdc.status |= FDCSTAT_RQM;
+	fdc.status &= ~FDCSTAT_CB;
 }
 
 static void FDC_SenceintStatus(void) {					// cmd: 08
@@ -528,10 +611,12 @@ static void FDC_SenceintStatus(void) {					// cmd: 08
 	fdc.event = FDCEVENT_BUFSEND;
 	fdc.bufp = 0;
 	fdc.bufcnt = 0;
-	fdc.status = FDCSTAT_RQM | FDCSTAT_CB | FDCSTAT_DIO;
+	fdc.status &= 0x0f;
+	fdc.status |= FDCSTAT_RQM | FDCSTAT_CB | FDCSTAT_DIO;
 
-	if (fdc_isfdcinterrupt()) {
-		i = 0;
+
+//	if (fdc_isfdcinterrupt()) {
+//		i = 0;
 		if (fdc.stat[fdc.us]) {
 			fdc.buf[0] = (UINT8)fdc.stat[fdc.us];
 			fdc.buf[1] = fdc.treg[fdc.us];
@@ -540,7 +625,7 @@ static void FDC_SenceintStatus(void) {					// cmd: 08
 //			TRACEOUT(("fdc stat - %d [%.2x]", fdc.us, fdc.buf[0]));
 		}
 		else {
-			for (; i<4; i++) {
+			for (i=0; i<4; i++) {
 				if (fdc.stat[i]) {
 					fdc.buf[0] = (UINT8)fdc.stat[i];
 					fdc.buf[1] = fdc.treg[i];
@@ -551,19 +636,27 @@ static void FDC_SenceintStatus(void) {					// cmd: 08
 				}
 			}
 		}
-		for (; i<4; i++) {
-			if (fdc.stat[i]) {
-				break;
-			}
-		}
-		if (i >= 4) {
-			fdc_interruptreset();
-		}
-	}
+//		for (; i<4; i++) {
+//			if (fdc.stat[i]) {
+//				break;
+//			}
+//		}
+//		if (i >= 4) {
+//			fdc_interruptreset();
+//		}
+//
+//	}
 	if (!fdc.bufcnt) {
 		fdc.buf[0] = FDCRLT_IC1;
 		fdc.bufcnt = 1;
 	}
+	/* 170101 ST modified to work on Windows 9x/2000 form ... */
+	else if ((fdc.ctrlreg & 0x08) == 0) {
+		//fdc.buf[0] |= 0x08;
+		//fdc.bufcnt = 1;
+		fdc.ctrlreg |= 0x08; // アクセスされたらモータ回す･･･ np21w ver0.86 rev39
+	}
+	/* 170101 ST modified to work on Windows 9x/2000 ... to */
 }
 
 static void FDC_ReadID(void) {							// cmd: 0a
@@ -574,10 +667,13 @@ static void FDC_ReadID(void) {							// cmd: 0a
 			get_hdus();
 			if (fdd_readid() == SUCCESS) {
 				fdcsend_success7();
+				//fdc.status = 0x80; // TEST
 			}
 			else {
 				fdc.stat[fdc.us] = fdc.us | (fdc.hd << 2) |
-													FDCRLT_IC0 | FDCRLT_MA;
+//													FDCRLT_IC0 | FDCRLT_MA;
+													FDCRLT_IC0 | FDCRLT_ND;
+
 				fdcsend_error7();
 			}
 			break;
@@ -601,14 +697,23 @@ static void FDC_WriteID(void) {							// cmd: 0d
 					fdcsend_error7();
 					break;
 				}
+				/* 170107 modified to work on Windows 9x/2000 form ... */
+				if (!fdd_isformating()) {
+					fdc.crcn = 1;
+					fdcsend_success7();
+					break;
+				}
+				/* 170107 modified to work on Windows 9x/2000 ... to */
 //				TRACE_("FDC_WriteID FDCEVENT_BUFRECV", 0);
 				fdc.event = FDCEVENT_BUFRECV;
 				fdc.bufcnt = 4;
 				fdc.bufp = 0;
 #if 1															// ver0.27 ??
-				fdc.status = FDCSTAT_NDM | FDCSTAT_CB;
-				if (!(fdc.ctrlreg & 0x10)) {
-					fdc.status |= FDCSTAT_RQM;
+				fdc.status &= 0x0f;
+				fdc.status |= (1 << fdc.us);
+				fdc.status |= FDCSTAT_RQM | FDCSTAT_CB;
+				if (fdc.nd) {
+					fdc.status |= FDCSTAT_NDM;
 				}
 #else
 				fdc.status = FDCSTAT_RQM | FDCSTAT_NDM | FDCSTAT_CB;
@@ -631,9 +736,11 @@ static void FDC_WriteID(void) {							// cmd: 0d
 			fdc.bufcnt = 4;
 			fdc.bufp = 0;
 #if 1															// ver0.27 ??
-			fdc.status = FDCSTAT_NDM | FDCSTAT_CB;
-			if (!(fdc.ctrlreg & 0x10)) {
-				fdc.status |= FDCSTAT_RQM;
+			fdc.status &= 0x0f;
+			fdc.status |= (1 << fdc.us);
+			fdc.status |= FDCSTAT_RQM | FDCSTAT_CB;
+			if (fdc.nd) {
+				fdc.status |= FDCSTAT_NDM;
 			}
 #else
 			fdc.status = FDCSTAT_RQM | FDCSTAT_NDM | FDCSTAT_CB;
@@ -652,24 +759,40 @@ static void FDC_Seek(void) {							// cmd: 0f
 	switch(fdc.event) {
 		case FDCEVENT_CMDRECV:
 			get_hdus();
-			fdc.ncn = fdc.cmds[1];
-			fdc.stat[fdc.us] = (fdc.hd << 2) | fdc.us;
-			fdc.stat[fdc.us] |= FDCRLT_SE;
-			if ((!(fdc.equip & (1 << fdc.us))) ||
-				(!fddfile[fdc.us].fname[0])) {
-				fdc.stat[fdc.us] |= FDCRLT_NR | FDCRLT_IC0;
+//			fdc.ncn = fdc.cmds[1];
+//			fdc.treg[fdc.us] = fdc.ncn;
+//			fdc.R = 1;
+//			fdc.crcn = fdc.R;				/* 170107 for Windows95 */
+			/* 170101 ST modified to work on Windows 9x/2000 */
+			fdcint.int_stat[fdc.us] = /*(fdc.hd << 2) |*/ fdc.us;
+			fdcint.int_stat[fdc.us] |= FDCRLT_SE;
+			if (!fdd_diskready(fdc.us)) {
+				fdcint.int_stat[fdc.us] |= FDCRLT_IC0 | FDCRLT_NR;
 			}
 			else {
-				fdd_seek();
+				fdc.ncn = fdc.cmds[1];
+				fdc.treg[fdc.us] = fdc.ncn;
+				fdc.R = 1;
+				fdc.crcn = fdc.R;				/* 170107 for Windows95 */
+				/* 170107 for Windows95 form ... */
+				//if (fdd_seek()) {
+				//	fdc.stat[fdc.us] |= FDCRLT_IC0;
+				//}
+				fdcint.lasttreg[fdc.us] = fdc.treg[fdc.us];
+				/* 170107 for Windows95 ... to */
 			}
-			fdc_interrupt();
+			fdcint.int_timer[fdc.us] = FDC_INT_DELAY;
+			fdc.status &= 0x0f;
+			fdc.status |= (1 << fdc.us);
+//			fdc_interrupt();
 			break;
 	}
 	fdc.event = FDCEVENT_NEUTRAL;
-	fdc.status = FDCSTAT_RQM;
+	fdc.status |= FDCSTAT_RQM;
+	fdc.status &= ~FDCSTAT_CB;
 }
 
-#if 0
+#ifdef SUPPORT_KAI_IMAGES
 static void FDC_ScanEqual(void) {						// cmd: 11, 19, 1d
 
 	switch(fdc.event) {
@@ -691,10 +814,10 @@ typedef void (*FDCOPE)(void);
 static const FDCOPE FDC_Ope[0x20] = {
 				FDC_Invalid,
 				FDC_Invalid,
-#ifdef SUPPORT_KAI_IMAGES	/* ANDROID: np2kai から移植 */
+#ifdef SUPPORT_KAI_IMAGES
 				FDC_ReadDiagnostic,
 #else
-				FDC_ReadData,			// FDC_ReadDiagnostic,
+				FDC_ReadData,
 #endif
 				FDC_Specify,
 				FDC_SenseDeviceStatus,
@@ -710,7 +833,7 @@ static const FDCOPE FDC_Ope[0x20] = {
 				FDC_Invalid,
 				FDC_Seek,
 				FDC_Invalid,					// 10
-#ifdef SUPPORT_KAI_IMAGES	/* ANDROID: np2kai から移植 */
+#ifdef SUPPORT_KAI_IMAGES
 				FDC_ScanEqual,
 #else
 				FDC_Invalid,			// FDC_ScanEqual,
@@ -722,7 +845,7 @@ static const FDCOPE FDC_Ope[0x20] = {
 				FDC_Invalid,
 				FDC_Invalid,
 				FDC_Invalid,
-#ifdef SUPPORT_KAI_IMAGES	/* ANDROID: np2kai から移植 */
+#ifdef SUPPORT_KAI_IMAGES
 				FDC_ScanEqual,
 #else
 				FDC_Invalid,			// FDC_ScanEqual,
@@ -730,7 +853,7 @@ static const FDCOPE FDC_Ope[0x20] = {
 				FDC_Invalid,
 				FDC_Invalid,
 				FDC_Invalid,
-#ifdef SUPPORT_KAI_IMAGES	/* ANDROID: np2kai から移植 */
+#ifdef SUPPORT_KAI_IMAGES
 				FDC_ScanEqual,
 #else
 				FDC_Invalid,			// FDC_ScanEqual,
@@ -745,7 +868,7 @@ static void fdcstatusreset(void) {
 
 	fdc.event = FDCEVENT_NEUTRAL;
 	fdc.status = FDCSTAT_RQM;
-#ifdef SUPPORT_KAI_IMAGES	/* ANDROID: np2kai から移植 */
+#ifdef SUPPORT_KAI_IMAGES
 	fdc_diag_nfd1_mode = FALSE;
 #endif
 }
@@ -774,11 +897,12 @@ void DMACCALL fdc_datawrite(REG8 data) {
 			default:
 				fdc.cmd = data;
 				get_mtmfsk();
+				fdc.status |= FDCSTAT_CB;	// コマンド受けたらCBをセット
 				if (FDCCMD_TABLE[data & 0x1f]) {
 					fdc.event = FDCEVENT_CMDRECV;
 					fdc.cmdp = 0;
 					fdc.cmdcnt = FDCCMD_TABLE[data & 0x1f];
-					fdc.status = FDCSTAT_RQM | FDCSTAT_CB;
+					fdc.status |= FDCSTAT_RQM;
 				}
 				else {
 					fdc.status &= ~FDCSTAT_RQM;
@@ -791,6 +915,8 @@ void DMACCALL fdc_datawrite(REG8 data) {
 
 REG8 DMACCALL fdc_dataread(void) {
 
+	int		i;
+
 //	if ((fdc.status & (FDCSTAT_RQM | FDCSTAT_DIO))
 //									== (FDCSTAT_RQM | FDCSTAT_DIO)) {
 		switch(fdc.event) {
@@ -798,7 +924,18 @@ REG8 DMACCALL fdc_dataread(void) {
 				fdc.lastdata = fdc.buf[fdc.bufp++];
 				if (!(--fdc.bufcnt)) {
 					fdc.event = FDCEVENT_NEUTRAL;
-					fdc.status = FDCSTAT_RQM;
+					fdc.status &= ~(1 << fdc.us);
+					fdc.status &= ~(FDCSTAT_DIO | FDCSTAT_CB);
+					fdc.status |= FDCSTAT_RQM;
+				}
+				// 割り込みクリア処理
+				for (i = 0; i < 4; i++) {
+					if (fdc.stat[i]) {
+						break;
+					}
+				}
+				if (i >= 4) {
+					fdc_interruptreset();
 				}
 				break;
 
@@ -816,6 +953,8 @@ REG8 DMACCALL fdc_dataread(void) {
 							fdc.R = 1;
 						}
 					}
+					/* 170101 ST modified to work on Windows 9x/2000 */
+					fdc.R = 1;
 					fdcsend_success7();
 				}
 				if (!fdc.bufcnt) {
@@ -829,16 +968,38 @@ REG8 DMACCALL fdc_dataread(void) {
 	return(fdc.lastdata);
 }
 
+/* SEEKとRECALIBRATEの割り込み通知処理 */
+void fdc_intdelay(void) {
+
+	int		i;
+
+	for (i = 0; i < 4; i++) {
+		if (fdcint.int_timer[i]) {
+			fdcint.int_timer[i]--;
+			if (!fdcint.int_timer[i]) {
+				fdc.stat[i] = fdcint.int_stat[i];
+				fdc_interrupt();
+			}
+		}
+	}
+}
 
 // ---- I/O
 
 static void IOOUTCALL fdc_o92(UINT port, REG8 dat) {
 
-//	TRACEOUT(("fdc out %.2x %.2x [%.4x:%.4x]", port, dat, CPU_CS, CPU_IP));
+	TRACEOUT(("fdc out %.2x %.2x [%.4x:%.4x]", port, dat, CPU_CS, CPU_IP));
 
 	if (((port >> 4) ^ fdc.chgreg) & 1) {
 		return;
 	}
+//	/* 170101 ST modified to work on Windows 9x/2000 form ... */
+//	if (fdc.status & FDCSTAT_DIO) {
+//		fdc.status &= ~FDCSTAT_DIO;
+//		fdc.status |= FDCSTAT_RQM;
+//	}
+//	/* 170101 ST modified to work on Windows 9x/2000 ... to */
+
 	if ((fdc.status & (FDCSTAT_RQM | FDCSTAT_DIO)) == FDCSTAT_RQM) {
 		fdc_datawrite(dat);
 	}
@@ -846,7 +1007,9 @@ static void IOOUTCALL fdc_o92(UINT port, REG8 dat) {
 
 static void IOOUTCALL fdc_o94(UINT port, REG8 dat) {
 
-//	TRACEOUT(("fdc out %.2x %.2x [%.4x:%.4x]", port, dat, CPU_CS, CPU_IP));
+	UINT8	i;
+
+	TRACEOUT(("fdc out %.2x %.2x [%.4x:%.4x]", port, dat, CPU_CS, CPU_IP));
 
 	if (((port >> 4) ^ fdc.chgreg) & 1) {
 		return;
@@ -856,13 +1019,41 @@ static void IOOUTCALL fdc_o94(UINT port, REG8 dat) {
 		fdc_dmaready(0);
 		dmac_check();
 	}
+	/* 170101 ST modified to work on Windows 9x/2000 form ... */
+	if ((fdc.ctrlreg ^ dat) & 0x80) {
+		if (dat & 0x80) {
+			fdcstatusreset();
+
+			if(dat & 0x08){ // XXX: Workaround for OSASK
+				// FDCリセット後 1,024ms以内にINTがアクティブになる
+				for (i = 0; i < 4; i++) {
+					fdcint.int_stat[i] = fdc.stat[i];
+					fdcint.int_timer[i] = FDC_INT_DELAY;
+				}
+			}
+		}
+	}
+	if (fdc.chgreg & 4) {
+		if ((fdc.ctrlreg ^ dat) & 0x08) {
+			if (dat & 0x08) {
+				for (i = 0; i < 4; i++) {
+					if (fdd_diskready(i)) {
+						fdcint.int_stat[i] = FDCRLT_AI | i;
+						fdcint.int_timer[i] = FDC_INT_DELAY;
+						fdc.status |= (1 << i);
+					}
+				}
+			}
+		}
+	}
+	/* 170101 ST modified to work on Windows 9x/2000 ... to */
 	fdc.ctrlreg = dat;
 }
 
 static REG8 IOINPCALL fdc_i90(UINT port) {
 
-//	TRACEOUT(("fdc in %.2x %.2x [%.4x:%.4x]", port, fdc.status,
-//															CPU_CS, CPU_IP));
+	TRACEOUT(("fdc in %.2x %.2x [%.4x:%.4x]", port, fdc.status,
+															CPU_CS, CPU_IP));
 
 	if (((port >> 4) ^ fdc.chgreg) & 1) {
 		return(0xff);
@@ -884,7 +1075,7 @@ static REG8 IOINPCALL fdc_i92(UINT port) {
 	else {
 		ret = fdc.lastdata;
 	}
-//	TRACEOUT(("fdc in %.2x %.2x [%.4x:%.4x]", port, ret, CPU_CS, CPU_IP));
+	TRACEOUT(("fdc in %.2x %.2x [%.4x:%.4x]", port, ret, CPU_CS, CPU_IP));
 	return(ret);
 }
 
@@ -911,12 +1102,16 @@ static REG8 IOINPCALL fdc_i94(UINT port) {
 	{
 		ret |= 0x08;		/* 外付け優先 */
 	}
+	TRACEOUT(("fdc in %.2x %.2x [%.4x:%.4x]", port, ret,
+														CPU_CS, CPU_IP));
 
 	return ret;
 }
 
 
 static void IOOUTCALL fdc_obe(UINT port, REG8 dat) {
+	
+	TRACEOUT(("fdc out %.2x %.2x [%.4x:%.4x]", port, dat, CPU_CS, CPU_IP));
 
 	fdc.chgreg = dat;
 	if (fdc.chgreg & 2) {
@@ -931,10 +1126,15 @@ static void IOOUTCALL fdc_obe(UINT port, REG8 dat) {
 static REG8 IOINPCALL fdc_ibe(UINT port) {
 
 	(void)port;
-	return((fdc.chgreg & 3) | 8);
+	TRACEOUT(("fdc in %.2x %.2x [%.4x:%.4x]", port, ((fdc.chgreg & 3) | 8),
+														CPU_CS, CPU_IP));
+
+	return((fdc.chgreg & 3) | 8 | 0xf0);
 }
 
 static void IOOUTCALL fdc_o4be(UINT port, REG8 dat) {
+	
+	TRACEOUT(("fdc out %.2x %.2x [%.4x:%.4x]", port, dat, CPU_CS, CPU_IP));
 
 	fdc.reg144 = dat;
 	if (dat & 0x10) {
@@ -946,7 +1146,9 @@ static void IOOUTCALL fdc_o4be(UINT port, REG8 dat) {
 static REG8 IOINPCALL fdc_i4be(UINT port) {
 
 	(void)port;
-	return(fdc.rpm[(fdc.reg144 >> 5) & 3] | 0xf0);
+	TRACEOUT(("fdc in %.2x %.2x [%.4x:%.4x]", port, (fdc.rpm[(fdc.reg144 >> 5) & 3] | 0xf0),
+													CPU_CS, CPU_IP));
+	return(fdc.rpm[(fdc.reg144 >> 5) & 3] | 0xfe);
 }
 
 
@@ -962,7 +1164,8 @@ static const IOINP fdcibe[1] = {fdc_ibe};
 void fdc_reset(const NP2CFG *pConfig) {
 
 	ZeroMemory(&fdc, sizeof(fdc));
-#ifdef SUPPORT_KAI_IMAGES	/* ANDROID: np2kai から移植 */
+	ZeroMemory(&fdcint, sizeof(fdcint));	/* ANDROID-FDC */
+#ifdef SUPPORT_KAI_IMAGES
 	fdc_diag_nfd1_mode = FALSE;
 #endif
 	fdc.equip = pConfig->fddequip;

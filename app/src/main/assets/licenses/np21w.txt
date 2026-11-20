@@ -1,6 +1,7 @@
-Neko Project 21/W (Windows NT/2000 用ホストドライブ)
+Neko Project 21/W (Windows NT/2000 用ホストドライブ、FDC)
 Neko Project 21/W rev107 から取り込んだもの。
 エミュレータ側: generic/hostdrvnt.c・hostdrvnt.h・hostdrvntdef.h・hostdrvwincompat.c・hostdrvwincompat.h、generic/hostdrvs.c の短い名前の部分 (アプリでは hostdrvsfn.c)。
+FDC: io/fdc.c・fdc.h (Windows NT/2000 の FD ドライバが動くようにした版)、io/dmac.c の DMA の番地の上位 8 ビット (0E05h〜0E0Bh)。
 ゲスト側: 「Neko Project II ホスト共有ドライブドライバ for WinNT」ver1.5 (SimK)。アプリに同梱の CD (hstdrvnt.iso) に入っています。
 以下は NP21/W の LICENSES/LICENSE.TXT。
 

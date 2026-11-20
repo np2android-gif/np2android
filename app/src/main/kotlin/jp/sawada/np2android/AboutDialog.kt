@@ -20,7 +20,7 @@ object AboutDialog {
         Component("FPU エミュレーション (NP2kai)", "BSD ライセンス (NONAKA Kimihiro、SimK)", "fpu.txt"),
         Component("Berkeley SoftFloat 3e", "BSD ライセンス (3 条項)", "softfloat3.txt"),
         Component("NP2kai (FDD・HDD・CD-ROM イメージの処理)", "MIT ライセンス / BSD ライセンス", "np2kai.txt"),
-        Component("Neko Project 21/W (Windows NT 用ホストドライブ・hstdrvnt)", "修正 BSD ライセンス (3 条項)", "np21w.txt"),
+        Component("Neko Project 21/W (Windows NT 用ホストドライブ・hstdrvnt、FDC)", "修正 BSD ライセンス (3 条項)", "np21w.txt"),
         Component("SDL2", "zlib ライセンス", "sdl2.txt"),
         Component("zlib", "zlib ライセンス", "zlib.txt"),
     )

@@ -259,7 +259,7 @@ Android 版のために書いたコードは修正 BSD ライセンスです（[
 | FPU エミュレーション（NP2kai、NONAKA Kimihiro 氏・SimK 氏） | BSD ライセンス |
 | Berkeley SoftFloat 3e（The Regents of the University of California） | BSD ライセンス（3 条項） |
 | NP2kai（AZO234 氏ほか） | MIT ライセンス |
-| Neko Project 21/W の Windows NT 用ホストドライブと、そのゲスト用ドライバ hstdrvnt（SimK 氏、NP2 developer team） | 修正 BSD ライセンス（3 条項） |
+| Neko Project 21/W の Windows NT 用ホストドライブと、そのゲスト用ドライバ hstdrvnt、FDC（io/fdc.c）と DMA の番地の上位 8 ビット（io/dmac.c の一部）（SimK 氏、NP2 developer team） | 修正 BSD ライセンス（3 条項） |
 | SDL2 | zlib ライセンス |
 | zlib | zlib ライセンス |
 

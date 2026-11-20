@@ -682,6 +682,9 @@ void pccore_exec(BOOL draw) {
 	calendar_inc();
 	S98_sync();
 	sound_sync();
+	/* ANDROID-FDC: SEEK・RECALIBRATE などの割り込みを数フレーム遅らせて上げる (NP21/W と同じ場所)。
+	 * エミュレートしている機械のフレームで数えるので、端末の速さ・ウェイト・一時停止には左右されない */
+	fdc_intdelay();
 
 	if (pcstat.hardwarereset) {
 		pcstat.hardwarereset = FALSE;
