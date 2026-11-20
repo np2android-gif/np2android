@@ -23,8 +23,8 @@ android {
         applicationId = "jp.sawada.np2android"
         minSdk = 24
         targetSdk = 37
-        versionCode = 20261126
-        versionName = "0.86-a18"
+        versionCode = 20261127
+        versionName = "0.86-a19"
 
         ndk {
             abiFilters += listOf("arm64-v8a", "x86_64")
