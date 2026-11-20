@@ -70,11 +70,15 @@ class Settings(context: Context) {
         set(v) = prefs.edit().putBoolean("hostdrv_nt", v).apply()
 
     /**
-     * ホストドライブの設定をエミュレータに渡す。起動時はエミュレータスレッドが動き出す前 (onCreate) に呼ぶ。
-     * 削除の許可は渡さない: xnp2 の hostdrv は削除・名前の変更・フォルダの作成に対応していない
-     * (NT 版で使う「削除・名前の変更を許可」は後で足す)
+     * 削除・名前の変更を許可 (NP21/W の権限の 4)。効くのは Windows NT 用だけ (xnp2 の DOS 版 hostdrv は
+     * 削除・名前の変更に対応していない)。名前の変更には書き込みの権限も要るので、書き込みを許可していなければ渡さない
      */
-    fun applyHostDrv() = Np2Native.setHostDrv(hostDrv, hostDrvWrite, false, hostDrvNt)
+    var hostDrvDelete: Boolean
+        get() = prefs.getBoolean("hostdrv_delete", false)
+        set(v) = prefs.edit().putBoolean("hostdrv_delete", v).apply()
+
+    /** ホストドライブの設定をエミュレータに渡す。起動時はエミュレータスレッドが動き出す前 (onCreate) に呼ぶ */
+    fun applyHostDrv() = Np2Native.setHostDrv(hostDrv, hostDrvWrite, hostDrvWrite && hostDrvDelete, hostDrvNt)
 
     /**
      * I/O ポートを 16 ビットで見分ける (PC-9821。NP21/W の SYSIOMSK=ff00 と同じ)。オフにすると古い PC-98 と同じく
@@ -193,12 +197,41 @@ object SettingsDialog {
             setTextAppearance(android.R.style.TextAppearance_DeviceDefault_Small)
             text = context.getString(R.string.hostdrv_note)
         })
+        // 削除・名前の変更 (Windows NT 用だけに効く)。書き込みを許可しているときだけ選べ、オンにするときは確かめる
+        val hdDelete = Switch(context).apply {
+            text = context.getString(R.string.hostdrv_delete)
+            isChecked = settings.hostDrvDelete
+            isEnabled = settings.hostDrv && settings.hostDrvWrite
+            gravity = Gravity.CENTER_VERTICAL
+            setOnCheckedChangeListener { sw, b ->
+                if (!b) {
+                    settings.hostDrvDelete = false
+                    settings.applyHostDrv()
+                    return@setOnCheckedChangeListener
+                }
+                if (settings.hostDrvDelete) return@setOnCheckedChangeListener
+                android.app.AlertDialog.Builder(context, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                    .setTitle(R.string.hostdrv_delete)
+                    .setMessage(R.string.hostdrv_delete_confirm)
+                    .setPositiveButton(R.string.hostdrv_delete_allow) { _, _ ->
+                        settings.hostDrvDelete = true
+                        settings.applyHostDrv()
+                    }
+                    .setNegativeButton(R.string.cancel) { _, _ -> sw.isChecked = false }
+                    .setOnCancelListener { sw.isChecked = false }
+                    .show()
+            }
+        }
         val hdWrite = Switch(context).apply {
             text = context.getString(R.string.hostdrv_write)
             isChecked = settings.hostDrvWrite
             isEnabled = settings.hostDrv
             gravity = Gravity.CENTER_VERTICAL
-            setOnCheckedChangeListener { _, b -> settings.hostDrvWrite = b; settings.applyHostDrv() }
+            setOnCheckedChangeListener { _, b ->
+                settings.hostDrvWrite = b
+                settings.applyHostDrv()
+                hdDelete.isEnabled = b
+            }
         }
         val hdNt = Switch(context).apply {
             text = context.getString(R.string.hostdrv_nt)
@@ -215,11 +248,13 @@ object SettingsDialog {
                 settings.hostDrv = b
                 settings.applyHostDrv()
                 hdWrite.isEnabled = b
+                hdDelete.isEnabled = b && settings.hostDrvWrite
                 hdNt.isEnabled = b
             }
         })
         root.addView(hdWrite)
         root.addView(hdNt)
+        root.addView(hdDelete)
         root.addView(TextView(context).apply {
             setTextAppearance(android.R.style.TextAppearance_DeviceDefault_Small)
             text = context.getString(R.string.hostdrv_nt_note)

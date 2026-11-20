@@ -104,5 +104,9 @@ Android 向けの変更 (変更箇所には /* ANDROID-HOSTDRV */ の印を付�
       表を確保していなければファイルを戻さない。
     NP21/W と同じく、「閉じたら消す」予約はステートに保存せず、セーブした時点で外れる。
 
-まだ入れていないもの
-  - 「削除・名前の変更を許可」の設定 (np2bridge は削除のビットを受け取れるが、Kotlin は常に false を渡す)。
+設定と同梱のドライバ (Kotlin)
+  - 「Windows NT/2000 からも使う」(hdrvntenable)、「削除・名前の変更を許可」(hdrvacc の 4。書き込みを許可して
+    いるときだけ渡す。オンにするときに確かめる)。削除は NT 版だけに効く (DOS 版は削除に対応していない)。
+  - ゲスト用のドライバは ISO (assets/hostdrvnt/hstdrvnt.iso) で同梱し、CD-ROM のメニューから入れる
+    (作業フォルダの hostdrvnt/ に写す)。Windows 2000 からは FD が読めないので FD (hstdrvnt.hdm) にはしない。
+    ISO の中身と作り方は tools/hostdrvnt_iso/README.md。

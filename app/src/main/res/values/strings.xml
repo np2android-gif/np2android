@@ -76,6 +76,11 @@
     <string name="hostdrv_enable">ホストドライブを使う</string>
     <string name="hostdrv_write">書き込みを許可</string>
     <string name="hostdrv_nt">Windows NT/2000 からも使う</string>
-    <string name="hostdrv_nt_note">Windows NT/2000 に NP21/W のホスト共有ドライブドライバ (hstdrvnt) を入れると、HOSTDRV フォルダがドライブ (ふつうは Z:) として見えます。切り替えたら、ゲストをリセットしてください。オンで保存したレジュームやステートは、0.86-a17 以前の版では読めません。</string>
+    <string name="hostdrv_nt_note">Windows NT/2000 に NP21/W のホスト共有ドライブドライバ (hstdrvnt) を入れると、HOSTDRV フォルダがドライブ (ふつうは Z:) として見えます。ドライバは、メニューの CD-ROM →「Windows NT/2000 用ホストドライブのドライバ」で CD として入れられます。切り替えたら、ゲストをリセットしてください。オンで保存したレジュームやステートは、0.86-a17 以前の版では読めません。</string>
+    <string name="hostdrv_delete">削除・名前の変更を許可 (Windows NT/2000 だけ)</string>
+    <string name="hostdrv_delete_confirm">Windows NT/2000 から、HOSTDRV フォルダの中のファイルやフォルダを消したり、名前を変えたりできるようにします。\nゲストの誤った操作や不具合で、Android 側のファイルが消えることがあります。大事なファイルは HOSTDRV フォルダに置いたままにしないでください。\n切り替えは次の操作から効きます。</string>
+    <string name="hostdrv_delete_allow">許可する</string>
+    <string name="hostdrvnt_driver_cd">Windows NT/2000 用ホストドライブのドライバ</string>
+    <string name="hostdrvnt_driver_failed">ドライバの CD を用意できませんでした。</string>
     <string name="hostdrv_note">作業フォルダの HOSTDRV フォルダを DOS から読み書きできるようにします。DOS で np2tool.d88 の HOSTDRV.COM を常駐させると (例: hostdrv g)、指定したドライブに見えます。中身はファイルアプリの「Neko Project II for Android」→ HOSTDRV から出し入れできます。DOS からはファイルの削除・名前の変更、フォルダの作成・削除はできません。\nオン・オフを切り替えたら、ゲストをリセットしてください。</string>
 </resources>

@@ -211,6 +211,8 @@ class Np2Menu(private val ctx: Context, private val host: Host) {
         items += ctx.getString(R.string.disk_open_direct) to { host.openDirect(t) }
         // CD-ROM は大きく、書き込みもしないので、コピー方式は用意しない
         if (t.kind != DiskImages.Kind.CD) items += ctx.getString(R.string.disk_import_copy) to { host.importDisk(t) }
+        // Windows NT/2000 用ホストドライブのドライバ (アプリに同梱した ISO)。Windows 2000 からは FD が読めないので CD で渡す
+        if (t.kind == DiskImages.Kind.CD) items += ctx.getString(R.string.hostdrvnt_driver_cd) to { insertHostDrvNtDriver() }
         for (e in DiskImageSource.recent(ctx, t.kind).filter { t.accepts(it.name) }) {
             items += if (DiskImageSource.isEntryUnavailable(ctx, e)) {
                 // 今は開けないもの。タップすると開き直してみて、開けなければ「履歴から消す」を選べる
@@ -291,6 +293,30 @@ class Np2Menu(private val ctx: Context, private val host: Host) {
             Np2Native.setHdd(t.drive, file.absolutePath)
             askReset("${t.label} を ${file.name} に変更しました。")
         }
+    }
+
+    /**
+     * 同梱の hstdrvnt.iso (assets/hostdrvnt/) を作業フォルダの hostdrvnt/ に写し、CD-ROM に入れる。
+     * 写しが既にあれば作り直さない (CD は読むだけなので、写しが書き換わることはない)。
+     * 別の CD が入っていても入れ替える (Q7 の入れ替えと同じ。元の CD は履歴や disks/ から選び直せる)
+     */
+    private fun insertHostDrvNtDriver() {
+        val dest = File(File(DiskImages.dataDir(ctx), "hostdrvnt"), "hstdrvnt.iso")
+        if (!dest.isFile) {
+            val ok = runCatching {
+                dest.parentFile?.mkdirs()
+                val tmp = File(dest.parentFile, "hstdrvnt.iso.tmp")
+                ctx.assets.open("hostdrvnt/hstdrvnt.iso").use { input ->
+                    tmp.outputStream().use { input.copyTo(it) }
+                }
+                tmp.renameTo(dest)
+            }.getOrDefault(false)
+            if (!ok) {
+                toast(ctx.getString(R.string.hostdrvnt_driver_failed))
+                return
+            }
+        }
+        insert(cd, dest)
     }
 
     private fun eject(t: DiskTarget) {
