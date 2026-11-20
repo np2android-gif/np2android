@@ -69,6 +69,8 @@ Android 向けの変更 (変更箇所には /* ANDROID-HOSTDRV */ の印を付�
     ファイルの表 (65536 件、arm64 で 6MB): 構造体の配列をポインタにし、NT 版を初めて有効にしたとき
       (hostdrvNT_bind) に確保する。元は起動・リセットのたびに全部を 0 で埋め、使わない人も 6MB 使っていた。
       表が無い間は、要求を何もせずに返す。
+    空き容量: ドライバの UseRealCapacity (既定 0、容量 2GB・空き 1GB の仮の値) に関係なく、HOSTDRV のある場所の
+      実の値 (hostdrvwincompat.c の GetDiskFreeSpaceExW、statvfs) を返す。取れなければ仮の値。
   - hostdrvwincompat.c
     CreateFileW: open に O_NOFOLLOW を足す (確かめてから開くまでの間にシンボリックリンクに替えられても辿らない)。
     SetFileTime: 時刻が 0 (とすべて 1) なら変えない (Win32 / FILE_BASIC_INFORMATION と同じ)。元は

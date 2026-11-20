@@ -3981,6 +3981,10 @@ static void hostdrvNT_invoke()
 	{
 		// おぷしょん
 		s_hostdrvNTOptions = cpu_kmemoryread_d(hostdrvNT.dataAddr + 44);
+		/* ANDROID-HOSTDRV: 空き容量は常に HOSTDRV フォルダのある場所の実の値 (statvfs) を返す。
+		   ドライバの既定 (UseRealCapacity=0) では、容量 2GB・空き 1GB の仮の値になり、
+		   実際の空きが少ないと写している途中で失敗する。取れないときは仮の値のまま。 */
+		s_hostdrvNTOptions |= HOSTDRVNTOPTIONS_USEREALCAPACITY;
 
 		// ホストファイルシステム監視
 		hostdrvNT_invokeMonitorChangeFS();
