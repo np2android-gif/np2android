@@ -211,7 +211,7 @@ class Np2Menu(private val ctx: Context, private val host: Host) {
         items += ctx.getString(R.string.disk_open_direct) to { host.openDirect(t) }
         // CD-ROM は大きく、書き込みもしないので、コピー方式は用意しない
         if (t.kind != DiskImages.Kind.CD) items += ctx.getString(R.string.disk_import_copy) to { host.importDisk(t) }
-        // Windows NT/2000 用ホストドライブのドライバ (アプリに同梱した ISO)。Windows 2000 からは FD が読めないので CD で渡す
+        // Windows NT/2000 用ホストドライブのドライバ (アプリに同梱した ISO)。a18 の時点では Windows 2000 から FD が読めなかったので CD で渡す (a19 から FD も読める)
         if (t.kind == DiskImages.Kind.CD) items += ctx.getString(R.string.hostdrvnt_driver_cd) to { insertHostDrvNtDriver() }
         for (e in DiskImageSource.recent(ctx, t.kind).filter { t.accepts(it.name) }) {
             items += if (DiskImageSource.isEntryUnavailable(ctx, e)) {

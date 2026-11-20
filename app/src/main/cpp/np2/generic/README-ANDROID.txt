@@ -110,5 +110,5 @@ Android 向けの変更 (変更箇所には /* ANDROID-HOSTDRV */ の印を付�
   - 「Windows NT/2000 からも使う」(hdrvntenable)、「削除・名前の変更を許可」(hdrvacc の 4。書き込みを許可して
     いるときだけ渡す。オンにするときに確かめる)。削除は NT 版だけに効く (DOS 版は削除に対応していない)。
   - ゲスト用のドライバは ISO (assets/hostdrvnt/hstdrvnt.iso) で同梱し、CD-ROM のメニューから入れる
-    (作業フォルダの hostdrvnt/ に写す)。Windows 2000 からは FD が読めないので FD (hstdrvnt.hdm) にはしない。
+    (作業フォルダの hostdrvnt/ に写す)。a18 の時点では Windows 2000 から FD が読めなかったので FD (hstdrvnt.hdm) にはしなかった (a19 で読めるようになったが、CD のままにしている)。
     ISO の中身と作り方は tools/hostdrvnt_iso/README.md。

@@ -2,7 +2,7 @@
 
 アプリに同梱する `app/src/main/assets/hostdrvnt/hstdrvnt.iso` の作り方です。CD-ROM のメニューの
 「Windows NT/2000 用ホストドライブのドライバ」で、この ISO を CD-ROM に入れます。
-Windows 2000 からは FD が読めないため、ドライバは FD ではなく CD で渡します。
+作った時点 (v0.86-a18) では Windows 2000 から FD が読めなかったため、ドライバは FD ではなく CD で渡します (v0.86-a19 で FD も読めるようになりました)。
 
 ## 中身
 
