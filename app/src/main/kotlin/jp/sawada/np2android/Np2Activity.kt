@@ -905,7 +905,7 @@ class Np2Activity : SDLActivity(), KeyboardController.Actions, Np2Menu.Host, Set
          */
         private const val CORNER_FACTOR = 0.3f
 
-        /** 横画面の左右のパネルの最小の幅 (dp)。右のパネルの 4 列が指で押せる幅 (前に重ねるかを決めていた余白と同じ) */
-        private const val MIN_PANEL_DP = 96
+        /** 横画面の左右のパネルの最小の幅 (dp)。右のパネルの 4 列が指で押せる幅 (a19 までの重ねていたパネルと同じ) */
+        private const val MIN_PANEL_DP = 120
     }
 }
