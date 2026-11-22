@@ -1,9 +1,9 @@
 # Neko Project II for Android
 
 PC-9801/PC-9821 シリーズのエミュレーター **Neko Project II**のXへの移植（Xnp2 0.86）を Android に移植したものです。
-FDD・HDD・CD-ROM のイメージの処理には **NP2kai** のコードを取り込んでいます。
+FDD・HDD・CD-ROM のイメージの処理には **NP2kai** のコードを、Windows NT/2000 用のホストドライブと FD（FDC・DMA の一部）には **Neko Project 21/W** のコードを取り込んでいます。
 
-> これは非公式の移植です。Neko Project II（ねこさん開発ちーむ）、Xnp2、NP2kai の作者の方々とは関係がありません。
+> これは非公式の移植です。Neko Project II（ねこさん開発ちーむ）、Xnp2、NP2kai、Neko Project 21/W の作者の方々とは関係がありません。
 > このアプリについての問い合わせは、元の作者の方々にはしないでください。
 
 2012〜2013 年に公開していた「Neko Project II for Android」の後継です（パッケージ名も同じ `jp.sawada.np2android`）。
@@ -241,7 +241,7 @@ rundll32 setupapi,InstallHinfSection DefaultInstall 132 f:\hostdrv.inf
 - Android Studio（JDK 同梱のもの）、Android SDK、NDK 28
 - `./gradlew :app:assembleRelease`（署名には `keystore.properties` が要ります。無ければ `assembleDebug` でデバッグ版を作れます）
 
-Android 向けの変更点と、NP2kai から取り込んだ部分の説明は、ソースの次のファイルにあります。
+Android 向けの変更点と、NP2kai・Neko Project 21/W から取り込んだ部分の説明は、ソースの次のファイルにあります。
 
 - [app/src/main/cpp/np2/fdd/README-ANDROID.txt](app/src/main/cpp/np2/fdd/README-ANDROID.txt)（HDD・CD-ROM・ステート）
 - [app/src/main/cpp/np2/diskimage/README-ANDROID.txt](app/src/main/cpp/np2/diskimage/README-ANDROID.txt)（FDD）
@@ -249,7 +249,7 @@ Android 向けの変更点と、NP2kai から取り込んだ部分の説明は�
 - [app/src/main/cpp/np2/i386c/README-ANDROID.txt](app/src/main/cpp/np2/i386c/README-ANDROID.txt)（IA-32 CPU コア）
 - [app/src/main/cpp/np2/bios/README-ANDROID.txt](app/src/main/cpp/np2/bios/README-ANDROID.txt)（互換 BIOS）
 - [app/src/main/cpp/np2/sdl2/README-ANDROID.txt](app/src/main/cpp/np2/sdl2/README-ANDROID.txt)（画面の表示）
-- [app/src/main/cpp/np2/io/README-ANDROID.txt](app/src/main/cpp/np2/io/README-ANDROID.txt)（I/O ポートの振り分け）
+- [app/src/main/cpp/np2/io/README-ANDROID.txt](app/src/main/cpp/np2/io/README-ANDROID.txt)（I/O ポートの振り分け、FDC・DMA）
 
 ## ライセンスと謝辞
 
@@ -266,4 +266,4 @@ Android 版のために書いたコードは修正 BSD ライセンスです（[
 | SDL2 | zlib ライセンス |
 | zlib | zlib ライセンス |
 
-Neko Project II・Xnp2・NP2kai を作り、ソースを公開してくださった方々に感謝します。
+Neko Project II・Xnp2・NP2kai・Neko Project 21/W を作り、ソースを公開してくださった方々に感謝します。
