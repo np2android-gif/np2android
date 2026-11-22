@@ -590,42 +590,36 @@ class Np2Activity : SDLActivity(), KeyboardController.Actions, Np2Menu.Host, Set
     }
 
     /**
-     * 横画面: PC-98 画面 (640x400 をアスペクト維持で中央表示) の左右余白にパネルを置き、
-     * フルキーボードは画面下部に重ねる。
+     * 横画面: PC-98 画面 (640x400 をアスペクト維持) の左右にパネルを置き、
+     * フルキーボードは PC-98 画面の下部に重ねる。
      */
     private fun placeLandscape(w: Int, h: Int) {
         val dp = resources.displayMetrics.density
-        val screenW = minOf(w, h * 16 / 10)
         val safe = safeArea()
         // 角の丸み・切り欠きの分だけ内側に寄せる (縦方向は角の丸みの分)
         val vInset = minOf(safe.bottom, (16 * dp).toInt())
         val panelH = h - vInset * 2
         val kbH = (h * settings.keyboardHeight).toInt()
 
-        if ((w - screenW) / 2 < (96 * dp).toInt()) {
-            // 余白が狭い (正方形に近い画面) ときは、PC-98 画面を真ん中に置き、パネルを画面に重ねる (今までどおり)
-            val margin = (120 * dp).toInt()
-            setSurfaceArea(0, ViewGroup.LayoutParams.MATCH_PARENT)
-            leftPanel?.layoutParams = FrameLayout.LayoutParams(margin - safe.left, panelH,
-                Gravity.START or Gravity.TOP).apply { leftMargin = safe.left; topMargin = vInset }
-            sidePanel?.layoutParams = FrameLayout.LayoutParams(margin - safe.right, panelH,
-                Gravity.END or Gravity.TOP).apply { rightMargin = safe.right; topMargin = vInset }
-            mainKeyboard?.layoutParams = FrameLayout.LayoutParams(
-                screenW, kbH, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL)
-        } else {
-            // ANDROID-KBD: 左右のパネルを同じ幅にする。カメラ穴 (切り欠き) が片側にだけある端末では、PC-98 画面を
-            // その反対側へずらす (前は画面を常に真ん中に置き、切り欠きの側のパネルだけ細くなっていた)。
-            // 切り欠きが左右同じ (無い) ときは、今までと同じ配置になる。
-            val panelW = (w - screenW - safe.left - safe.right) / 2
-            val screenX = safe.left + panelW
-            setSurfaceArea(0, ViewGroup.LayoutParams.MATCH_PARENT, screenX, screenW)
-            leftPanel?.layoutParams = FrameLayout.LayoutParams(panelW, panelH,
-                Gravity.START or Gravity.TOP).apply { leftMargin = safe.left; topMargin = vInset }
-            sidePanel?.layoutParams = FrameLayout.LayoutParams(panelW, panelH,
-                Gravity.START or Gravity.TOP).apply { leftMargin = screenX + screenW; topMargin = vInset }
-            mainKeyboard?.layoutParams = FrameLayout.LayoutParams(
-                screenW, kbH, Gravity.BOTTOM or Gravity.START).apply { leftMargin = screenX }
-        }
+        // ANDROID-KBD: 左右のパネルは必ず PC-98 画面の外に置き、同じ幅にする。
+        // - 余白が足りない (正方形に近い) 画面では、パネルに最小の幅 (MIN_PANEL_DP) を取り、PC-98 画面はその間に
+        //   収まるよう縮める (SDL が 16:10 を保って上下に黒い帯を出す)。前はパネルを画面に重ねていたので、
+        //   画面と同じ幅のフルキーボードの左右の端が、パネルの下半分と重なっていた。
+        // - カメラ穴 (切り欠き) が片側にだけある端末では、PC-98 画面をその反対側へずらす。
+        // フルキーボードは PC-98 画面と同じ位置・幅なので、パネルとは重ならない。
+        val avail = w - safe.left - safe.right
+        val minPanel = (MIN_PANEL_DP * dp).toInt()
+        val screenW = minOf(h * 16 / 10, avail - minPanel * 2).coerceAtLeast(1)
+        val panelW = (avail - screenW) / 2
+        val screenX = safe.left + panelW
+        if (BuildConfig.DEBUG) Log.d(TAG, "placeLandscape screenW=$screenW panelW=$panelW screenX=$screenX dp=$dp")
+        setSurfaceArea(0, ViewGroup.LayoutParams.MATCH_PARENT, screenX, screenW)
+        leftPanel?.layoutParams = FrameLayout.LayoutParams(panelW, panelH,
+            Gravity.START or Gravity.TOP).apply { leftMargin = safe.left; topMargin = vInset }
+        sidePanel?.layoutParams = FrameLayout.LayoutParams(panelW, panelH,
+            Gravity.START or Gravity.TOP).apply { leftMargin = screenX + screenW; topMargin = vInset }
+        mainKeyboard?.layoutParams = FrameLayout.LayoutParams(
+            screenW, kbH, Gravity.BOTTOM or Gravity.START).apply { leftMargin = screenX }
 
         show(portraitKeyboard, false)
         show(leftPanel, true)
@@ -910,5 +904,8 @@ class Np2Activity : SDLActivity(), KeyboardController.Actions, Np2Menu.Host, Set
          * キーは角が丸いので、これだけ離せば欠けは目立たない。上端 (PC-98 画面) は半径いっぱい避ける。
          */
         private const val CORNER_FACTOR = 0.3f
+
+        /** 横画面の左右のパネルの最小の幅 (dp)。右のパネルの 4 列が指で押せる幅 (前に重ねるかを決めていた余白と同じ) */
+        private const val MIN_PANEL_DP = 96
     }
 }
