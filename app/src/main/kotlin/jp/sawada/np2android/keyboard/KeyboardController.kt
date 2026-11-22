@@ -38,8 +38,6 @@ class KeyboardController(private val actions: Actions) {
         }
     }
 
-    fun isPressed(code: Int) = (pressCount[code] ?: 0) > 0
-
     fun isLocked(code: Int) = SoftKeyCodes.toPc98(code) in locked
 
     fun press(code: Int) {
@@ -78,11 +76,20 @@ class KeyboardController(private val actions: Actions) {
             code == SoftKeyCodes.MOUSE_RIGHT -> Np2Native.mouseButton(Np2Native.MOUSE_RIGHT, false)
             // 以下は離したときに実行 (押した指をずらしてキャンセルする余地を残す)
             code == SoftKeyCodes.MENU -> actions.openMenu()
-            code == SoftKeyCodes.STATE_SAVE -> Np2Native.saveState(Np2Menu.QUICK_SLOT)
-            // ディスクがセーブ時と違うときは Np2Menu のリスナーが確認ダイアログを出す
-            code == SoftKeyCodes.STATE_LOAD -> Np2Native.loadState(Np2Menu.QUICK_SLOT, false)
             code == SoftKeyCodes.TOGGLE_KEYBOARD -> actions.toggleKeyboard()
             code == SoftKeyCodes.TOGGLE_SIDE -> actions.toggleSide()
+        }
+    }
+
+    /**
+     * ANDROID-KBD: クイックセーブ・ロードは長押し (SoftKeyboardView が押し続けた時間を数え、達したら呼ぶ)。
+     * press・release では何もしない。
+     */
+    fun longPress(code: Int) {
+        when (code) {
+            SoftKeyCodes.STATE_SAVE -> Np2Native.saveState(Np2Menu.QUICK_SLOT)
+            // ディスクがセーブ時と違うときは Np2Menu のリスナーが確認ダイアログを出す
+            SoftKeyCodes.STATE_LOAD -> Np2Native.loadState(Np2Menu.QUICK_SLOT, false)
         }
     }
 
