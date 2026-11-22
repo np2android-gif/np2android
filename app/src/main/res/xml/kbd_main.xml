@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- フルキーボード (メイン): 旧版 res/xml/keyboard.xml の 1-5 行目 -->
+<!-- フルキーボード (横画面): 旧版 res/xml/keyboard.xml の 1-5 行目に、右に 2 列 (INS・DEL・ROLL UP/DOWN・BS・RET・SHIFT・SPACE) を足した 14 列 -->
 <!-- code: PC-98 キーコード(10進) / 117=ESC 118=左クリック 119=右クリック 120=np2メニュー 121=ステートセーブ 122=ステートロード 123=ページ切替 124=キーボード表示切替 125=側面キー表示切替 -->
 <!-- width/gap: キーボード幅に対する % -->
-<keyboard keyWidth="7.5">
+<keyboard keyWidth="7.142857">
     <row>
-        <key code="96" label="STOP"/>
-        <key code="97" label="COPY"/>
+        <key code="15" label="TAB"/>
+        <key code="117" label="ESC"/>
         <key code="98" label="F1"/>
         <key code="99" label="F2"/>
         <key code="100" label="F3"/>
@@ -16,7 +16,8 @@
         <key code="105" label="F8"/>
         <key code="106" label="F9"/>
         <key code="107" label="F10"/>
-        <key code="123" label="⇄" width="10"/>
+        <key code="56" label="INS"/>
+        <key code="54" label="R UP"/>
     </row>
     <row>
         <key code="1" label="1"/>
@@ -31,6 +32,8 @@
         <key code="10" label="0"/>
         <key code="11" label="-"/>
         <key code="12" label="^"/>
+        <key code="57" label="DEL"/>
+        <key code="55" label="RDWN"/>
     </row>
     <row>
         <key code="16" label="Q"/>
@@ -45,6 +48,8 @@
         <key code="25" label="P"/>
         <key code="26" label="＠"/>
         <key code="13" label="￥"/>
+        <key code="14" label="BS"/>
+        <key code="28" label="RET"/>
     </row>
     <row>
         <key code="29" label="A"/>
@@ -59,6 +64,7 @@
         <key code="38" label=";"/>
         <key code="39" label=":"/>
         <key code="27" label="["/>
+        <key code="112" label="SHIFT" width="14.285714"/>
     </row>
     <row>
         <key code="41" label="Z"/>
@@ -73,5 +79,6 @@
         <key code="50" label="/"/>
         <key code="51" label="_"/>
         <key code="40" label="]"/>
+        <key code="52" label="SPACE" width="14.285714"/>
     </row>
 </keyboard>

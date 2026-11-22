@@ -4,10 +4,10 @@
 <!-- width/gap: キーボード幅に対する % -->
 <keyboard keyWidth="25">
     <row>
+        <key code="96" label="STOP"/>
+        <key code="97" label="COPY"/>
         <key code="15" label="TAB"/>
         <key code="117" label="ESC"/>
-        <key code="121" label="S"/>
-        <key code="122" label="L"/>
     </row>
     <row>
         <key code="116" label="CTL"/>

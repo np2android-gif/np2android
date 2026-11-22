@@ -533,10 +533,8 @@ class Np2Activity : SDLActivity(), KeyboardController.Actions, Np2Menu.Host, Set
 
         leftPanel = SoftKeyboardView(this, listOf(KeyLayout.load(resources, R.xml.kbd_left)), controller)
         sidePanel = SoftKeyboardView(this, listOf(KeyLayout.load(resources, R.xml.kbd_side)), controller)
-        mainKeyboard = SoftKeyboardView(this, listOf(
-            KeyLayout.load(resources, R.xml.kbd_main),
-            KeyLayout.load(resources, R.xml.kbd_ext),
-        ), controller)
+        // ANDROID-KBD: 横画面のフルキーボードは 14 列の 1 枚 (前は kbd_ext とのページ切り替えだった)
+        mainKeyboard = SoftKeyboardView(this, listOf(KeyLayout.load(resources, R.xml.kbd_main)), controller)
         portraitKeyboard = SoftKeyboardView(this, listOf(KeyLayout.load(resources, R.xml.kbd_portrait)), controller)
         ov.addView(leftPanel)
         ov.addView(sidePanel)
@@ -596,22 +594,38 @@ class Np2Activity : SDLActivity(), KeyboardController.Actions, Np2Menu.Host, Set
      * フルキーボードは画面下部に重ねる。
      */
     private fun placeLandscape(w: Int, h: Int) {
-        setSurfaceArea(0, ViewGroup.LayoutParams.MATCH_PARENT)
         val dp = resources.displayMetrics.density
         val screenW = minOf(w, h * 16 / 10)
-        var margin = (w - screenW) / 2
-        // 余白が狭い (正方形に近い画面) ときは画面に重ねる
-        if (margin < (96 * dp).toInt()) margin = (120 * dp).toInt()
-
-        // 角の丸み・切り欠きの分だけ内側に寄せる (縦方向は角の丸みの分)
         val safe = safeArea()
+        // 角の丸み・切り欠きの分だけ内側に寄せる (縦方向は角の丸みの分)
         val vInset = minOf(safe.bottom, (16 * dp).toInt())
-        leftPanel?.layoutParams = FrameLayout.LayoutParams(margin - safe.left, h - vInset * 2,
-            Gravity.START or Gravity.TOP).apply { leftMargin = safe.left; topMargin = vInset }
-        sidePanel?.layoutParams = FrameLayout.LayoutParams(margin - safe.right, h - vInset * 2,
-            Gravity.END or Gravity.TOP).apply { rightMargin = safe.right; topMargin = vInset }
-        mainKeyboard?.layoutParams = FrameLayout.LayoutParams(
-            screenW, (h * settings.keyboardHeight).toInt(), Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL)
+        val panelH = h - vInset * 2
+        val kbH = (h * settings.keyboardHeight).toInt()
+
+        if ((w - screenW) / 2 < (96 * dp).toInt()) {
+            // 余白が狭い (正方形に近い画面) ときは、PC-98 画面を真ん中に置き、パネルを画面に重ねる (今までどおり)
+            val margin = (120 * dp).toInt()
+            setSurfaceArea(0, ViewGroup.LayoutParams.MATCH_PARENT)
+            leftPanel?.layoutParams = FrameLayout.LayoutParams(margin - safe.left, panelH,
+                Gravity.START or Gravity.TOP).apply { leftMargin = safe.left; topMargin = vInset }
+            sidePanel?.layoutParams = FrameLayout.LayoutParams(margin - safe.right, panelH,
+                Gravity.END or Gravity.TOP).apply { rightMargin = safe.right; topMargin = vInset }
+            mainKeyboard?.layoutParams = FrameLayout.LayoutParams(
+                screenW, kbH, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL)
+        } else {
+            // ANDROID-KBD: 左右のパネルを同じ幅にする。カメラ穴 (切り欠き) が片側にだけある端末では、PC-98 画面を
+            // その反対側へずらす (前は画面を常に真ん中に置き、切り欠きの側のパネルだけ細くなっていた)。
+            // 切り欠きが左右同じ (無い) ときは、今までと同じ配置になる。
+            val panelW = (w - screenW - safe.left - safe.right) / 2
+            val screenX = safe.left + panelW
+            setSurfaceArea(0, ViewGroup.LayoutParams.MATCH_PARENT, screenX, screenW)
+            leftPanel?.layoutParams = FrameLayout.LayoutParams(panelW, panelH,
+                Gravity.START or Gravity.TOP).apply { leftMargin = safe.left; topMargin = vInset }
+            sidePanel?.layoutParams = FrameLayout.LayoutParams(panelW, panelH,
+                Gravity.START or Gravity.TOP).apply { leftMargin = screenX + screenW; topMargin = vInset }
+            mainKeyboard?.layoutParams = FrameLayout.LayoutParams(
+                screenW, kbH, Gravity.BOTTOM or Gravity.START).apply { leftMargin = screenX }
+        }
 
         show(portraitKeyboard, false)
         show(leftPanel, true)
@@ -643,15 +657,21 @@ class Np2Activity : SDLActivity(), KeyboardController.Actions, Np2Menu.Host, Set
         show(portraitKeyboard, true)
     }
 
-    /** SDL の描画面の位置と高さを変える (SDL は surfaceChanged でウィンドウサイズを更新し、640x400 を合わせ直す) */
-    private fun setSurfaceArea(top: Int, height: Int) {
+    /**
+     * SDL の描画面の位置と大きさを変える (SDL は surfaceChanged でウィンドウサイズを更新し、640x400 を合わせ直す)。
+     * width を省くと幅いっぱい。ANDROID-KBD: 横画面では PC-98 画面の幅にして横にずらす (画面のタッチによるマウス
+     * 操作は描画面の中の動きの量なので、ずらしても変わらない)
+     */
+    private fun setSurfaceArea(top: Int, height: Int, left: Int = 0, width: Int = ViewGroup.LayoutParams.MATCH_PARENT) {
         val surface = mSurface ?: return
         val current = surface.layoutParams as? RelativeLayout.LayoutParams
-        if (current != null && current.width == ViewGroup.LayoutParams.MATCH_PARENT &&
-            current.height == height && current.topMargin == top) return
-        surface.layoutParams = RelativeLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, height).apply {
+        if (current != null && current.width == width && current.height == height &&
+            current.topMargin == top && current.leftMargin == left) return
+        surface.layoutParams = RelativeLayout.LayoutParams(width, height).apply {
             addRule(RelativeLayout.ALIGN_PARENT_TOP)
+            addRule(RelativeLayout.ALIGN_PARENT_LEFT)
             topMargin = top
+            leftMargin = left
         }
     }
 
