@@ -268,6 +268,13 @@ const SCRNSURF *scrnmng_surflock(void) {
 	}
 	scrnsurf.width = min(scrnstat.width, 640);
 	scrnsurf.height = min(scrnstat.height, 480);		/* ANDROID-SCRN */
+	/* ANDROID-SCRN: メニューを開いている間は、メニューを開いたときの大きさで作った scrnmng.vram に描く。
+	   その間にゲストが 400 ラインから 480 ラインに変わっても (Windows 2000 の起動など)、vram の外に
+	   書かないよう vram の大きさで切る。閉じたときに scrnmng_leavemenu で全体を描き直す (Q13) */
+	if (scrnmng.vram != NULL) {
+		scrnsurf.width = min(scrnsurf.width, scrnmng.vram->width);
+		scrnsurf.height = min(scrnsurf.height, scrnmng.vram->height);
+	}
 	scrnsurf.extend = 0;
 	return(&scrnsurf);
 }
@@ -423,6 +430,11 @@ smem_err:
 void scrnmng_leavemenu(void) {
 
 	VRAM_RELEASE(scrnmng.vram);
+	/* ANDROID-SCRN: メニューの間に描かなかった部分 (高さが 480 に変わったときの下の 80 ライン) が
+	   残らないよう、今の高さで全体を描き直す。終了の処理 (scrnmng_destroy の後) では描かない (Q13) */
+	if (scrnmng.enable) {
+		scrndraw_redraw();
+	}
 }
 
 void scrnmng_menudraw(const RECT_T *rct) {
