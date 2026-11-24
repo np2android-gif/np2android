@@ -22,7 +22,6 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.WindowInsets
 import android.view.WindowInsetsController
-import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.RelativeLayout
@@ -527,28 +526,26 @@ class Np2Activity : SDLActivity(), KeyboardController.Actions, Np2Menu.Host, Set
         // エミュレータの起動処理 (レジュームの読み込みを含む) が終わったときに知らせが来るので、そこで
         // 合わせ直す (Np2Native の onLockSync)。それまでは getLockState() が 0 を返す
         controller.syncLocks()
-        val ov = FrameLayout(this)
-        root.addView(ov, RelativeLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-
+        // ANDROID-KBD: パネルは SDL の描画面と同じ root (mLayout) に直接置く (Q14)。前は画面全体を覆う
+        // FrameLayout に入れていたので、L を押した指がその FrameLayout をタッチの相手にすると、2 本目の指を
+        // PC-98 画面に置いても root はその指も同じ FrameLayout に渡し、さらに L のパネルに回されて捨てられた
+        // (L を押したまま画面をなぞるドラッグができなかった)。root に直接置けば、root が 2 本目の指の下にある
+        // 子 (SDL の描画面) を探して渡す
         leftPanel = SoftKeyboardView(this, listOf(KeyLayout.load(resources, R.xml.kbd_left)), controller)
         sidePanel = SoftKeyboardView(this, listOf(KeyLayout.load(resources, R.xml.kbd_side)), controller)
         // ANDROID-KBD: 横画面のフルキーボードは 14 列の 1 枚 (前は kbd_ext とのページ切り替えだった)
         mainKeyboard = SoftKeyboardView(this, listOf(KeyLayout.load(resources, R.xml.kbd_main)), controller)
         portraitKeyboard = SoftKeyboardView(this, listOf(KeyLayout.load(resources, R.xml.kbd_portrait)), controller)
-        ov.addView(leftPanel)
-        ov.addView(sidePanel)
-        ov.addView(mainKeyboard)
-        ov.addView(portraitKeyboard)
+        for (panel in allPanels) root.addView(panel)
 
-        ov.addOnLayoutChangeListener { _, l, t, r, b, ol, ot, or_, ob ->
+        root.addOnLayoutChangeListener { _, l, t, r, b, ol, ot, or_, ob ->
             if (r - l != or_ - ol || b - t != ob - ot) {
                 overlaySize = (r - l) to (b - t)
-                ov.post { placePanels(r - l, b - t) }
+                root.post { placePanels(r - l, b - t) }
             }
         }
-        // 切り欠き・角の情報が届いた/変わったら置き直す
-        ov.setOnApplyWindowInsetsListener { v, insets ->
+        // 切り欠き・角の情報が届いた/変わったら置き直す (insets は消費せず、子にもそのまま渡る)
+        root.setOnApplyWindowInsetsListener { v, insets ->
             v.post { placePanels(overlaySize.first, overlaySize.second) }
             insets
         }
@@ -614,12 +611,13 @@ class Np2Activity : SDLActivity(), KeyboardController.Actions, Np2Menu.Host, Set
         val screenX = safe.left + panelW
         if (BuildConfig.DEBUG) Log.d(TAG, "placeLandscape screenW=$screenW panelW=$panelW screenX=$screenX dp=$dp")
         setSurfaceArea(0, ViewGroup.LayoutParams.MATCH_PARENT, screenX, screenW)
-        leftPanel?.layoutParams = FrameLayout.LayoutParams(panelW, panelH,
-            Gravity.START or Gravity.TOP).apply { leftMargin = safe.left; topMargin = vInset }
-        sidePanel?.layoutParams = FrameLayout.LayoutParams(panelW, panelH,
-            Gravity.START or Gravity.TOP).apply { leftMargin = screenX + screenW; topMargin = vInset }
-        mainKeyboard?.layoutParams = FrameLayout.LayoutParams(
-            screenW, kbH, Gravity.BOTTOM or Gravity.START).apply { leftMargin = screenX }
+        leftPanel?.layoutParams = panelParams(panelW, panelH, safe.left, vInset)
+        sidePanel?.layoutParams = panelParams(panelW, panelH, screenX + screenW, vInset)
+        mainKeyboard?.layoutParams = RelativeLayout.LayoutParams(screenW, kbH).apply {
+            addRule(RelativeLayout.ALIGN_PARENT_BOTTOM)
+            addRule(RelativeLayout.ALIGN_PARENT_LEFT)
+            leftMargin = screenX
+        }
 
         show(portraitKeyboard, false)
         show(leftPanel, true)
@@ -641,9 +639,7 @@ class Np2Activity : SDLActivity(), KeyboardController.Actions, Np2Menu.Host, Set
         val screenH = w * 3 / 4
         setSurfaceArea(screenTop, screenH)
         val kbTop = screenTop + screenH
-        portraitKeyboard?.layoutParams = FrameLayout.LayoutParams(w, h - kbTop - safe.bottom, Gravity.TOP).apply {
-            topMargin = kbTop
-        }
+        portraitKeyboard?.layoutParams = panelParams(w, h - kbTop - safe.bottom, 0, kbTop)
 
         show(leftPanel, false)
         show(sidePanel, false)
@@ -668,6 +664,15 @@ class Np2Activity : SDLActivity(), KeyboardController.Actions, Np2Menu.Host, Set
             leftMargin = left
         }
     }
+
+    /** root (RelativeLayout) の左上から left・top の位置に置く */
+    private fun panelParams(width: Int, height: Int, left: Int, top: Int) =
+        RelativeLayout.LayoutParams(width, height).apply {
+            addRule(RelativeLayout.ALIGN_PARENT_TOP)
+            addRule(RelativeLayout.ALIGN_PARENT_LEFT)
+            leftMargin = left
+            topMargin = top
+        }
 
     private fun show(view: SoftKeyboardView?, visible: Boolean) {
         view ?: return

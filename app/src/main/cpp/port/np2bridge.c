@@ -1056,7 +1056,8 @@ BOOL np2bridge_handle(const SDL_Event *e)
 			break;
 
 		case NP2CMD_MOUSEBUTTON:
-			mousemng_button((int)(intptr_t)u->data1, (intptr_t)u->data2 != 0);
+			/* ANDROID-MOUSE: ソフトキー・物理キーボードの L・R (Q14) */
+			mousemng_hold((int)(intptr_t)u->data1, MOUSEMNG_BYKEY, (intptr_t)u->data2 != 0);
 			break;
 
 		case NP2CMD_SETFDD:

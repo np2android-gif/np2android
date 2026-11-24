@@ -4,9 +4,11 @@
  *
  * タッチ操作 (np2 メニューが閉じているとき) はタッチパッド方式:
  *   - 1 本指ドラッグ        : マウス移動 (相対)
- *   - 1 本指タップ          : 左クリック
+ *   - 1 本指タップ          : 左クリック (DOUBLETAP_GAP だけ待ってから送る)
  *   - タップ直後に押して保持 : 左ボタンを押したままドラッグ (ダブルタップ＝ダブルクリック)
  *   - 2 本指タップ          : 右クリック
+ *   - ソフトキーの L・R を押している間は、指はカーソルを動かすだけ (タップ・2 本指タップ・
+ *     タップして押し直すドラッグは出さない)
  * np2 メニューが開いているときは、SDL がタッチから合成するマウスイベント
  * (論理座標 640x400、ゲストが 640x480 のときは 640x480) でメニューを操作する。
  */
@@ -42,7 +44,6 @@
 #define	TAP_MAXTIME			250		/* ms: これより長い押下はタップ扱いしない */
 #define	TAP_MAXMOVE			6.0f	/* PC-98 画素: これより動いたらタップではない */
 #define	DOUBLETAP_GAP		300		/* ms: 前回タップからこの時間内に押すとドラッグ */
-#define	CLICK_DURATION		60		/* ms: タップで送るクリックの長さ */
 #define	MAX_FINGERS			5
 
 typedef struct {
@@ -54,7 +55,9 @@ typedef struct {
 	float			moved;					/* 最初の指の累積移動量 (PC-98 画素) */
 	int				maxcount;				/* このジェスチャ中の最大指数 */
 	BOOL			dragging;				/* 左ボタン保持中 */
-	UINT32			lasttap;				/* 直近のタップ時刻 */
+	UINT32			lasttap;				/* 直近のタップ時刻 (0 = 送っていないクリックは無い) */
+	BOOL			secondtap;				/* このドラッグはタップの直後に押し直したもの */
+	BOOL			bykey;					/* このジェスチャ中にソフトキーの L・R が押されていた */
 } TOUCHPAD;
 
 static	TOUCHPAD	s_touch;
@@ -176,12 +179,43 @@ static int finger_index(SDL_FingerID id) {
 	return -1;
 }
 
+/** ソフトキー・物理キーの L・R を押しているか */
+static BOOL key_held(void) {
+
+	return(mousemng_isheld(MOUSEMNG_LEFT, MOUSEMNG_BYKEY) ||
+			mousemng_isheld(MOUSEMNG_RIGHT, MOUSEMNG_BYKEY));
+}
+
 static void touch_reset(void) {
 
 	if (s_touch.dragging) {
-		mousemng_button(MOUSEMNG_LEFT, FALSE);
+		mousemng_hold(MOUSEMNG_LEFT, MOUSEMNG_BYTOUCH, FALSE);
 	}
 	ZeroMemory(&s_touch, sizeof(s_touch));
+}
+
+/*
+ * ANDROID-MOUSE: 1 本指のタップは、クリックをすぐには送らず DOUBLETAP_GAP 待つ (Q14)。前は離したときに
+ * すぐクリックを送ったので、押し直してドラッグしようとすると、ゲストには「押す・離す・押す」と見え、
+ * ダブルクリックと判定された。待つ間に押し直されなければ、ここでクリックを送る。
+ * 待つ間にソフトキー・外部マウスのボタンが押されたら、待っていたクリックは捨てる。
+ */
+static void touch_update(void) {
+
+	if (s_touch.lasttap == 0) {
+		return;
+	}
+	if (key_held() || mousemng_isheld(MOUSEMNG_LEFT, MOUSEMNG_BYMOUSE) ||
+		mousemng_isheld(MOUSEMNG_RIGHT, MOUSEMNG_BYMOUSE)) {
+		s_touch.lasttap = 0;
+		TOUCHLOG("tap click dropped (button pressed)");
+		return;
+	}
+	if ((SDL_GetTicks() - s_touch.lasttap) >= DOUBLETAP_GAP) {
+		s_touch.lasttap = 0;
+		mousemng_click(MOUSEMNG_LEFT);
+		TOUCHLOG("tap -> left click");
+	}
 }
 
 static void touch_down(const SDL_TouchFingerEvent *f) {
@@ -202,13 +236,19 @@ static void touch_down(const SDL_TouchFingerEvent *f) {
 		s_touch.downtime = now;
 		s_touch.moved = 0.0f;
 		s_touch.maxcount = 1;
-		if ((s_touch.lasttap != 0) && ((now - s_touch.lasttap) < DOUBLETAP_GAP)) {
-			/* タップ直後にもう一度押した → ボタンを押したままドラッグ */
+		s_touch.secondtap = FALSE;
+		s_touch.bykey = key_held();
+		if ((!s_touch.bykey) && (s_touch.lasttap != 0) && ((now - s_touch.lasttap) < DOUBLETAP_GAP)) {
+			/* タップ直後にもう一度押した → 待っていたクリックは送らず、ボタンを押したままドラッグ */
 			s_touch.dragging = TRUE;
-			mousemng_button(MOUSEMNG_LEFT, TRUE);
+			s_touch.secondtap = TRUE;
+			mousemng_hold(MOUSEMNG_LEFT, MOUSEMNG_BYTOUCH, TRUE);
 			TOUCHLOG("drag start (left down)");
 		}
 		s_touch.lasttap = 0;
+	}
+	if (key_held()) {
+		s_touch.bykey = TRUE;
 	}
 }
 
@@ -240,29 +280,44 @@ static void touch_up(const SDL_TouchFingerEvent *f) {
 		return;
 	}
 	s_touch.ids[idx] = s_touch.ids[--s_touch.count];
+	quick = ((now - s_touch.downtime) < TAP_MAXTIME) && (s_touch.moved < TAP_MAXMOVE);
+	if (key_held()) {
+		s_touch.bykey = TRUE;
+	}
 
 	if (f->fingerId == s_touch.primary) {
 		s_touch.hasprimary = FALSE;
 		if (s_touch.dragging) {
 			s_touch.dragging = FALSE;
-			mousemng_button(MOUSEMNG_LEFT, FALSE);
-			s_touch.maxcount = 0;		/* このジェスチャではクリックを出さない */
+			mousemng_hold(MOUSEMNG_LEFT, MOUSEMNG_BYTOUCH, FALSE);
 			TOUCHLOG("drag end (left up), moved=%.1f", s_touch.moved);
+			if (s_touch.secondtap && quick && (s_touch.maxcount == 1)) {
+				/* 押し直した指を動かさずにすぐ離した = 2 回タップ。もう 1 回クリックを足してダブルクリックにする */
+				mousemng_click(MOUSEMNG_LEFT);
+				TOUCHLOG("double tap -> second click");
+			}
+			s_touch.maxcount = 0;		/* このジェスチャではほかにクリックを出さない */
 		}
 	}
 	if (s_touch.count > 0) {
 		return;
 	}
 
-	/* 全部の指が離れた: ジェスチャ判定 */
-	quick = ((now - s_touch.downtime) < TAP_MAXTIME) && (s_touch.moved < TAP_MAXMOVE);
-	if (quick && (s_touch.maxcount == 1)) {
-		mousemng_click(MOUSEMNG_LEFT, CLICK_DURATION);
-		s_touch.lasttap = now;
-		TOUCHLOG("tap -> left click");
+	/* 全部の指が離れた: ジェスチャ判定。ソフトキーの L・R を押していた間はクリックにしない */
+	if (s_touch.bykey) {
+		if (s_touch.maxcount > 0) {
+			TOUCHLOG("move with key held: fingers=%d moved=%.1f", s_touch.maxcount, s_touch.moved);
+		}
+	}
+	else if (quick && (s_touch.maxcount == 1)) {
+		s_touch.lasttap = now;		/* クリックは touch_update で DOUBLETAP_GAP の後に送る */
+		if (s_touch.lasttap == 0) {
+			s_touch.lasttap = 1;
+		}
+		TOUCHLOG("tap (click pending)");
 	}
 	else if (quick && (s_touch.maxcount == 2)) {
-		mousemng_click(MOUSEMNG_RIGHT, CLICK_DURATION);
+		mousemng_click(MOUSEMNG_RIGHT);
 		TOUCHLOG("2-finger tap -> right click");
 	}
 	else if (s_touch.maxcount > 0) {
@@ -286,6 +341,7 @@ void taskmng_rol(void) {
 	SDL_Event	e;
 	int			n;
 
+	touch_update();
 	mousemng_update();
 	redraw_update();
 
@@ -337,10 +393,10 @@ void taskmng_rol(void) {
 				else if (e.button.which != SDL_TOUCH_MOUSEID) {
 					/* 外部マウス */
 					if (e.button.button == SDL_BUTTON_LEFT) {
-						mousemng_button(MOUSEMNG_LEFT, e.type == SDL_MOUSEBUTTONDOWN);
+						mousemng_hold(MOUSEMNG_LEFT, MOUSEMNG_BYMOUSE, e.type == SDL_MOUSEBUTTONDOWN);
 					}
 					else if (e.button.button == SDL_BUTTON_RIGHT) {
-						mousemng_button(MOUSEMNG_RIGHT, e.type == SDL_MOUSEBUTTONDOWN);
+						mousemng_hold(MOUSEMNG_RIGHT, MOUSEMNG_BYMOUSE, e.type == SDL_MOUSEBUTTONDOWN);
 					}
 				}
 				break;
