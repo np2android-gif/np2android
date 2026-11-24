@@ -39,6 +39,12 @@ enum {
 void np2bridge_sysiomsk(void);
 
 /**
+ * ANDROID-FONT: Kotlin に端末の日本語フォントで字を描いてもらい、_MALLOC したバイト列を返す
+ * (形は androidfont.c)。描けなかったときは NULL。エミュレータスレッドから呼ぶ
+ */
+UINT8 *np2bridge_renderfont(UINT *size);
+
+/**
  * ANDROID-HOSTDRV: Kotlin から setHostDrv で渡された設定を np2cfg.hdrvroot / hdrvacc に反映する。
  * 有効なら <作業フォルダ>/HOSTDRV/ を作ってルートにする。無効ならルートを空にし、マウント中なら外す。
  * 起動時 (initload の後) と NP2CMD_SETHOSTDRV で、エミュレータスレッドから呼ぶ

@@ -97,6 +97,14 @@ class Settings(context: Context) {
         get() = prefs.getBoolean("file_manager_notice_shown", false)
         set(v) = prefs.edit().putBoolean("file_manager_notice_shown", v).apply()
 
+    /**
+     * font.tmp を作った仕組みの版 ([FontGlyphs.VERSION])。端末の日本語フォントから作ったときだけ記録する (Q15)。
+     * 0 は記録なし (a22 までは英数字だけの font.tmp を作っていた)
+     */
+    var fontTmpVersion: Int
+        get() = prefs.getInt("font_tmp_version", 0)
+        set(v) = prefs.edit().putInt("font_tmp_version", v).apply()
+
     companion object {
         const val ORIENTATION_AUTO = 0
         const val ORIENTATION_LANDSCAPE = 1

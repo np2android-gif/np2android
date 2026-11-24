@@ -44,6 +44,13 @@ FDD・HDD・CD-ROM のイメージの処理には **NP2kai** のコードを、W
 2. 「端末のファイルを直接開く」で、端末に置いたイメージを選びます。
 3. HDD を変えたときは、メニューの案内に従ってリセットします。
 
+### 漢字のフォント
+
+- 実機のフォント（FONT.ROM など）が無くても、DOS や Windows 2000 のテキスト画面に漢字が出ます。初めて起動したときに、端末の日本語フォントから作業フォルダに `font.tmp`（漢字 ROM の代わり）を作ります。数秒かかり、その間「フォントを準備しています」と出ます（v0.86-a23 から）。
+- 字の形は端末のフォントなので、実機の字とは違います。実機の字を使いたいときは、作業フォルダに `FONT.ROM`（または `FONT.BMP`）を置いてください。そちらが優先されます。
+- `font.tmp` を消すと、次に起動したときに作り直します。
+- v0.86-a22 までに作られた `font.tmp` は、漢字が「?」になっていました。v0.86-a23 に更新して最初に起動したときに、自動で作り直します（外から写した `font.tmp` はそのまま使います）。
+
 ## 画面とメニュー
 
 画面の下半分はソフトキーボードです。上の段の「MENU」でメニューを開きます。「SAVE」「LOAD」はクイックセーブ・クイックロードで、少し（約 0.5 秒）押し続けると、振動して確認なしに保存・読み込みします（メニューのスロットとは別の場所）。短く押したときや、押したまま指をキーの外へずらしたときは何もしません。
@@ -264,6 +271,7 @@ Android 向けの変更点と、NP2kai・Neko Project 21/W から取り込んだ
 - [app/src/main/cpp/np2/i386c/README-ANDROID.txt](app/src/main/cpp/np2/i386c/README-ANDROID.txt)（IA-32 CPU コア）
 - [app/src/main/cpp/np2/bios/README-ANDROID.txt](app/src/main/cpp/np2/bios/README-ANDROID.txt)（互換 BIOS）
 - [app/src/main/cpp/np2/sdl2/README-ANDROID.txt](app/src/main/cpp/np2/sdl2/README-ANDROID.txt)（画面の表示）
+- [app/src/main/cpp/np2/font/README-ANDROID.txt](app/src/main/cpp/np2/font/README-ANDROID.txt)（漢字のフォント）
 - [app/src/main/cpp/np2/io/README-ANDROID.txt](app/src/main/cpp/np2/io/README-ANDROID.txt)（I/O ポートの振り分け、FDC・DMA）
 
 ## ライセンスと謝辞

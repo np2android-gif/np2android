@@ -179,6 +179,13 @@ object Np2Native {
 
     private val mainHandler = Handler(Looper.getMainLooper())
 
+    /**
+     * ANDROID-FONT: font.tmp を作るときに、エミュレータスレッドから JNI で呼ばれる。
+     * 端末の日本語フォントで描いた全部の字を返す ([FontGlyphs.render])。描けなければ null
+     */
+    @JvmStatic
+    fun renderFontGlyphs(): ByteArray? = FontGlyphs.render()
+
     /** エミュレータスレッドから JNI で呼ばれる。UI スレッドへ転送する */
     @JvmStatic
     fun onNativeEvent(type: Int, a: Int, b: Int, text: String?) {

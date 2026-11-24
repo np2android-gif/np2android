@@ -54,6 +54,7 @@ enum {
 
 static jclass		s_nativeClass;
 static jmethodID	s_onNativeEvent;
+static jmethodID	s_renderFont;		/* ANDROID-FONT: Np2Native.renderFontGlyphs */
 
 /*
  * エミュレータスレッド (SDL_main) は SDL が作ったネイティブスレッドで、そこでの FindClass は
@@ -72,6 +73,13 @@ JNIEXPORT jint JNICALL JNI_OnLoad(JavaVM *vm, void *reserved)
 		s_nativeClass = (jclass)(*env)->NewGlobalRef(env, cls);
 		s_onNativeEvent = (*env)->GetStaticMethodID(env, cls, "onNativeEvent",
 													"(IIILjava/lang/String;)V");
+		if (s_onNativeEvent != NULL) {
+			s_renderFont = (*env)->GetStaticMethodID(env, cls, "renderFontGlyphs", "()[B");
+			if (s_renderFont == NULL) {
+				(*env)->ExceptionClear(env);
+				__android_log_print(ANDROID_LOG_ERROR, LOG_TAG, "Np2Native.renderFontGlyphs not found");
+			}
+		}
 		(*env)->DeleteLocalRef(env, cls);
 	}
 	if ((s_nativeClass == NULL) || (s_onNativeEvent == NULL)) {
@@ -149,6 +157,47 @@ static void notify(int type, int a, int b, const char *text)
 	if (jtext != NULL) {
 		(*env)->DeleteLocalRef(env, jtext);
 	}
+}
+
+/**
+ * ANDROID-FONT: Kotlin (Np2Native.renderFontGlyphs) に端末の日本語フォントで字を描いてもらう。
+ * font.tmp を作るとき (makepc98bmp) に、エミュレータスレッドから呼ぶ。
+ * 返すのは _MALLOC したバイト列 (形は androidfont.c)。描けなかったときは NULL
+ */
+UINT8 *np2bridge_renderfont(UINT *size)
+{
+	JNIEnv *env;
+	jbyteArray arr;
+	jsize len;
+	UINT8 *ret = NULL;
+
+	*size = 0;
+	if ((s_nativeClass == NULL) || (s_renderFont == NULL)) {
+		return NULL;
+	}
+	env = (JNIEnv *)SDL_AndroidGetJNIEnv();
+	if (env == NULL) {
+		return NULL;
+	}
+	arr = (jbyteArray)(*env)->CallStaticObjectMethod(env, s_nativeClass, s_renderFont);
+	if ((*env)->ExceptionCheck(env)) {
+		(*env)->ExceptionDescribe(env);
+		(*env)->ExceptionClear(env);
+		arr = NULL;
+	}
+	if (arr == NULL) {
+		return NULL;
+	}
+	len = (*env)->GetArrayLength(env, arr);
+	if (len > 0) {
+		ret = (UINT8 *)_MALLOC(len, "font glyphs");
+		if (ret != NULL) {
+			(*env)->GetByteArrayRegion(env, arr, 0, len, (jbyte *)ret);
+			*size = (UINT)len;
+		}
+	}
+	(*env)->DeleteLocalRef(env, arr);
+	return ret;
 }
 
 /* ---- UI スレッド側: イベントを積むだけ ---------------------------------- */

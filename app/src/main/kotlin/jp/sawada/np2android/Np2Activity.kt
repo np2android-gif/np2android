@@ -79,6 +79,9 @@ class Np2Activity : SDLActivity(), KeyboardController.Actions, Np2Menu.Host, Set
         settings.applyHostDrv()
         // I/O ポートの見分け方 (np2.cfg には保存しない)。最初のリセットより前に反映される
         settings.applySysIoMask()
+        // a22 までの「?」の font.tmp は消して、端末の日本語フォントで作り直させる (Q15)
+        FontGlyphs.prepare(DiskImages.dataDir(this), settings)
+        FontGlyphs.progress = { show -> runOnUiThread { showFontProgress(show) } }
         if (startup.lost.isNotEmpty()) {
             dialog()
                 .setTitle(R.string.disk_lost_title)
@@ -105,7 +108,36 @@ class Np2Activity : SDLActivity(), KeyboardController.Actions, Np2Menu.Host, Set
         applySettings()
     }
 
+    /** font.tmp を作っている間の表示 ([FontGlyphs.progress])。すぐ終わるときは出さない */
+    private var fontProgress: AlertDialog? = null
+    private val showFontProgressLater = Runnable { fontProgress?.show() }
+
+    private fun showFontProgress(show: Boolean) {
+        if (show) {
+            if (fontProgress != null || isFinishing) return
+            val pad = (20 * resources.displayMetrics.density).toInt()
+            val box = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(pad, pad, pad, pad)
+                addView(ProgressBar(this@Np2Activity))
+                addView(TextView(this@Np2Activity).apply { setText(R.string.font_preparing) },
+                    LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = pad })
+            }
+            fontProgress = dialog().setView(box).setCancelable(false).create()
+            mLayout?.postDelayed(showFontProgressLater, 300)
+        } else {
+            mLayout?.removeCallbacks(showFontProgressLater)
+            fontProgress?.let { if (it.isShowing) it.dismiss() }
+            fontProgress = null
+        }
+    }
+
     override fun onDestroy() {
+        FontGlyphs.progress = null
+        mLayout?.removeCallbacks(showFontProgressLater)
+        fontProgress?.let { if (it.isShowing) it.dismiss() }
+        fontProgress = null
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             backCallback?.let { onBackInvokedDispatcher.unregisterOnBackInvokedCallback(it) }
         }

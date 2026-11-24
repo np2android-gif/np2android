@@ -9,6 +9,11 @@
 #include	"font.h"
 #include	"fontdata.h"
 #include	"fontmake.h"
+#if defined(__ANDROID__)	/* ANDROID-FONT: 字の形を端末の日本語フォントからもらう (port/androidfont.c) */
+#include	"androidfont.h"
+
+static BOOL s_androidfont;		/* fnt が androidfont_create で作ったもの */
+#endif
 
 
 typedef struct {
@@ -131,6 +136,27 @@ const UINT8	*p;
 	return(TRUE);
 }
 
+/* ANDROID-FONT: 字の形を取り出す。Android のフォントには Shift JIS のまま渡す
+   (UTF-8 に変えると NEC 特殊文字などが変わることがあるので、Kotlin 側で MS932 として読む) */
+static FNTDAT getfont(void *fnt, const char *sjis) {
+
+#if defined(OSLANG_EUC) || defined(OSLANG_UTF8) || defined(OSLANG_UCS2)
+	OEMCHAR	oemwork[4];
+#endif
+
+#if defined(__ANDROID__)
+	if (s_androidfont) {
+		return(androidfont_get(fnt, sjis));
+	}
+#endif
+#if defined(OSLANG_EUC) || defined(OSLANG_UTF8) || defined(OSLANG_UCS2)
+	oemtext_sjistooem(oemwork, NELEMENTS(oemwork), sjis, -1);
+	return(fontmng_get(fnt, oemwork));
+#else
+	return(fontmng_get(fnt, sjis));
+#endif
+}
+
 static void setank(UINT8 *ptr, void *fnt, UINT from, UINT to) {
 
 	char	work[2];
@@ -141,20 +167,12 @@ const UINT8	*p;
 	int		height;
 	UINT8	bit;
 	int		i;
-#if defined(OSLANG_EUC) || defined(OSLANG_UTF8) || defined(OSLANG_UCS2)
-	OEMCHAR	oemwork[4];
-#endif
 
 	ptr += (2048 * (2048 / 8)) + from;
 	work[1] = '\0';
 	while(from < to) {
 		work[0] = (char)from;
-#if defined(OSLANG_EUC) || defined(OSLANG_UTF8) || defined(OSLANG_UCS2)
-		oemtext_sjistooem(oemwork, NELEMENTS(oemwork), work, -1);
-		dat = fontmng_get(fnt, oemwork);
-#else
-		dat = fontmng_get(fnt, work);
-#endif
+		dat = getfont(fnt, work);		/* ANDROID-FONT */
 		if (dat) {
 			width = min(dat->width, 8);
 			height = min(dat->height, 16);
@@ -209,9 +227,6 @@ const UINT8	*p;
 	int		height;
 	UINT16	bit;
 	int		i;
-#if defined(OSLANG_EUC) || defined(OSLANG_UTF8) || defined(OSLANG_UCS2)
-	OEMCHAR	oemwork[4];
-#endif
 
 	work[2] = '\0';
 	ptr += ((0x80 - 0x21) * 16 * (2048 / 8)) + 2;
@@ -224,12 +239,7 @@ const UINT8	*p;
 				sjis = jis2sjis(jis);
 				work[0] = (UINT8)(sjis >> 8);
 				work[1] = (UINT8)sjis;
-#if defined(OSLANG_EUC) || defined(OSLANG_UTF8) || defined(OSLANG_UCS2)
-				oemtext_sjistooem(oemwork, NELEMENTS(oemwork), work, -1);
-				dat = fontmng_get(fnt, oemwork);
-#else
-				dat = fontmng_get(fnt, work);
-#endif
+				dat = getfont(fnt, work);		/* ANDROID-FONT */
 				if (dat) {
 					width = min(dat->width, 16);
 					height = min(dat->height, 16);
@@ -292,7 +302,13 @@ void makepc98bmp(const OEMCHAR *filename) {
 	FILEH	fh;
 	BOOL	r;
 
-#if defined(FDAT_SHIFTJIS)
+#if defined(__ANDROID__)	/* ANDROID-FONT: 描けなければ今までどおり fontmng (英数字だけ) */
+	fnt = androidfont_create();
+	s_androidfont = (fnt != NULL);
+	if (fnt == NULL) {
+		fnt = fontmng_create(16, 0, NULL);
+	}
+#elif defined(FDAT_SHIFTJIS)
 	fnt = fontmng_create(16, FDAT_SHIFTJIS, NULL);
 #else
 	fnt = fontmng_create(16, 0, NULL);
@@ -335,6 +351,13 @@ mfnt_err3:
 	_MFREE(ptr);
 
 mfnt_err2:
+#if defined(__ANDROID__)	/* ANDROID-FONT */
+	if (s_androidfont) {
+		androidfont_destroy(fnt);
+		s_androidfont = FALSE;
+	}
+	else
+#endif
 	fontmng_destroy(fnt);
 
 mfnt_err1:

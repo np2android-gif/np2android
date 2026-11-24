@@ -9,6 +9,7 @@
     <string name="disk_inserted">%1$s に %2$s を入れました</string>
     <string name="disk_inserted_readonly">%1$s に %2$s を入れました (書き込み禁止)</string>
     <string name="disk_opening">%1$s\n開いています…</string>
+    <string name="font_preparing">フォントを準備しています…\n(初めて起動したときだけ)</string>
     <string name="disk_unsupported_title">対応していない形式です</string>
     <string name="disk_unsupported_message">%1$s\n\n%2$s に使える拡張子:\n%3$s</string>
     <string name="disk_not_seekable_title">この場所のファイルは直接開けません</string>
