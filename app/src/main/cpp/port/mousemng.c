@@ -24,6 +24,9 @@
 /** ゲストに見せるボタンの状態を変えてから、次に変えるまでの最小の時間 (ms) */
 #define	MIN_HOLD	60
 
+/** 溜めておくクリックの数の上限 (ダブルクリックの分) */
+#define	MAX_CLICKS	2
+
 typedef struct {
 	UINT	holders;				/* 押している理由 (MOUSEMNG_BY*) */
 	int		clicks;					/* まだ見せていないクリックの数 */
@@ -165,13 +168,18 @@ BOOL mousemng_isheld(int button, UINT by)
 	return (s_mouse.b[button].holders & by) ? TRUE : FALSE;
 }
 
-/** クリック (押す・離す) を 1 回送る */
+/**
+ * クリック (押す・離す) を 1 回送る。ゲストがマウスを読まない間 (重い処理の途中など) に何度もタップしても、
+ * 後からクリックが続けて出ないよう、溜めるのはダブルクリックの分 (MAX_CLICKS) までにする
+ */
 void mousemng_click(int button)
 {
 	if ((button < 0) || (button > 1)) {
 		return;
 	}
-	s_mouse.b[button].clicks++;
+	if (s_mouse.b[button].clicks < MAX_CLICKS) {
+		s_mouse.b[button].clicks++;
+	}
 	step_all();
 }
 
