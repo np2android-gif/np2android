@@ -5,8 +5,8 @@
  * xnp2 は font.tmp (漢字 ROM の代わり) を fontmake.c の makepc98bmp で作り、字の形を fontmng から
  * もらう。Android 版の fontmng (sdl2/fontmng.c) は RESOURCE_US で英数字 (ank12) しか持たないので、
  * 漢字・かな・半角カナが「?」になっていた。
- * font.tmp を作るときだけ、字の形を Kotlin (Np2Native.renderFontGlyphs → FontGlyphs.kt) で端末の
- * 日本語フォントから描いてもらい、ここから makepc98bmp に渡す。PC-98 に無い文字の除外・78/83 JIS の
+ * font.tmp を作るときだけ、字の形を Kotlin (Np2Native.renderFontGlyphs → FontGlyphs.kt) からもらい
+ * (東雲フォントと JFドットJISKan16s の 16 ドットの字。無い字は端末のフォントで描く)、ここから makepc98bmp に渡す。PC-98 に無い文字の除外・78/83 JIS の
  * 入れ替え・内蔵の字の上書きは makepc98bmp のまま。内蔵メニューの文字 (fontmng) は変えない。
  *
  * Kotlin から受け取るバイト列の形 (1 の画素が字):

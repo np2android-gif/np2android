@@ -1,6 +1,6 @@
 /**
  * @file	androidfont.h
- * @brief	ANDROID-FONT: font.tmp を作るときに使う字の形 (端末の日本語フォントを Kotlin で描いたもの)
+ * @brief	ANDROID-FONT: font.tmp を作るときに使う字の形 (Kotlin の FontGlyphs.kt が渡す東雲フォントなど)
  */
 
 #pragma once
@@ -11,7 +11,7 @@
 extern "C" {
 #endif
 
-/** Kotlin に全部の字を描いてもらう。端末に日本語フォントが無いなど、描けなかったときは NULL */
+/** Kotlin から全部の字をもらう。もらえなかったときは NULL */
 void *androidfont_create(void);
 void androidfont_destroy(void *hdl);
 

@@ -1,15 +1,13 @@
 package jp.sawada.np2android
 
+import android.content.Context
+import android.content.res.AssetManager
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Rect
 import android.graphics.Typeface
-import android.graphics.fonts.FontFamily
-import android.graphics.fonts.FontStyle
-import android.graphics.fonts.SystemFonts
-import android.os.Build
 import android.os.SystemClock
 import android.util.Log
 import java.io.File
@@ -20,62 +18,85 @@ import java.nio.charset.CodingErrorAction
 import java.util.Locale
 
 /**
- * ANDROID-FONT (Q15): font.tmp (漢字 ROM の代わり) に使う字を、端末の日本語フォントで描く。
+ * ANDROID-FONT (Q15): font.tmp (漢字 ROM の代わり) に使う字の形。
  *
  * font.tmp を作るのはネイティブの makepc98bmp (np2/font/fontmake.c) で、字の形だけを
  * [Np2Native.renderFontGlyphs] → [render] でここからもらう (port/androidfont.c)。PC-98 に無い文字の除外、
  * 78/83 JIS の入れ替え、内蔵の字の上書きは makepc98bmp が行う。
  *
- * a22 までの font.tmp は、漢字・かな・半角カナが「?」になっている。起動のたびに [prepare] で調べ、
- * そうなっていれば消して、エミュレータが起動するときに作り直させる。
+ * 字の形は、assets の font16.bin (東雲フォントと JFドットJISKan16s の 16 ドットの字。作り方は
+ * tools/font16/README.md) から取る。そこに無い字 (89〜92 区のまれな漢字など) だけ、端末のフォントで描く。
+ *
+ * 古い font.tmp (a22 までの「?」のものと、このアプリが前の版で作ったもの) は、起動のたびに [prepare] で
+ * 調べて消し、エミュレータが起動するときに作り直させる。
  */
 object FontGlyphs {
 
-    /** font.tmp を作る仕組みの版。描き方を変えて作り直させたいときに上げる ([Settings.fontTmpVersion]) */
-    const val VERSION = 1
+    /**
+     * font.tmp を作る仕組みの版。字の形を変えて作り直させたいときに上げる ([Settings.fontTmpVersion])。
+     * 1: 端末のフォント (a23 の前のテスト版だけ)、2: 東雲フォント + JFドットJISKan16s
+     */
+    const val VERSION = 2
 
     private const val TAG = "np2font"
+    private const val ASSET = "font16.bin"
+    private val MAGIC = byteArrayOf(0x4e, 0x50, 0x32, 0x46, 0x31, 0x36, 0x00, 0x01)   // "NP2F16" 0 1
     private const val ANK_SIZE = 256 * 16
     private const val KNJ_SIZE = 94 * 94 * 32
+    private const val ANK_MARK = 256 / 8
+    private const val KNJ_MARK = (94 * 94 + 7) / 8
 
-    /**
-     * 白黒の描き方。アンチエイリアスで描いてしきい値で切ると、16 ドットでは細い線 (矢印の縦線、①の円など) が
-     * 消えるか、太りすぎる。アンチエイリアスなしで描くと、どちらも起きなかった (Q15 指示書 5 章の比べた画像)
-     */
-    private const val ANTI_ALIAS = false
-    /** アンチエイリアスで描くときのしきい値 (濃さ 0〜255 がこれ以上なら字) */
-    private const val THRESHOLD = 128
+    /** font.tmp の更新時刻が、記録した描いた時刻からこの範囲なら、このアプリが作ったものとみなす */
+    private const val MADE_BEFORE_MS = 5_000L
+    private const val MADE_AFTER_MS = 60_000L
 
     @Volatile
     private var settings: Settings? = null
 
+    @Volatile
+    private var assets: AssetManager? = null
+
     /**
      * 描いている間の表示 (true で出し、false で消す)。エミュレータのスレッドから呼ぶので、
-     * 受け取る側で UI スレッドに回すこと。描くのは数秒かかる (XZ3 で約 3 秒。多くはフォントの一覧を取る時間)
+     * 受け取る側で UI スレッドに回すこと。ふつうはすぐ終わり、表示は出ない
      */
     @Volatile
     var progress: ((Boolean) -> Unit)? = null
 
     /**
-     * 起動時 (エミュレータのスレッドが動き出す前) に呼ぶ。版の記録が古く、font.tmp が a22 までに作った
-     * 「?」のものなら消す。外から写した font.tmp や、利用者が置いた FONT.BMP・FONT.ROM は消さない。
-     * 日本語フォントが無い端末では、作り直しても同じなので消さない
+     * 起動時 (エミュレータのスレッドが動き出す前) に呼ぶ。版の記録が古く、font.tmp が古い作り方のものなら消す。
+     *  - a22 までに作った「?」のもの
+     *  - 版 1 で作ったもの (版 1 は描いた時刻を記録していないので、版 1 の記録があれば消す)
+     *  - 版 2 から: 更新時刻が、描いた時刻の記録のすぐ後のもの
+     * 外から写した font.tmp や、利用者が置いた FONT.BMP・FONT.ROM は消さない
      */
-    fun prepare(workDir: File, settings: Settings) {
+    fun prepare(context: Context, workDir: File, settings: Settings) {
         this.settings = settings
-        if (settings.fontTmpVersion >= VERSION) return
+        this.assets = context.applicationContext.assets
+        val made = settings.fontTmpVersion
+        if (made >= VERSION) return
         val file = File(workDir, "font.tmp")
         if (!file.isFile) return
-        val old = runCatching { isAnkOnly(file) }.getOrElse {
-            Log.w(TAG, "font.tmp: cannot read", it)
-            false
+        val reason = when {
+            made == 1 -> "made by version 1"
+            made >= 2 && madeByApp(file, settings.fontTmpMadeAt) -> "made by version $made"
+            runCatching { isAnkOnly(file) }.getOrElse {
+                Log.w(TAG, "font.tmp: cannot read", it)
+                false
+            } -> "kanji were '?'"
+            else -> return
         }
-        if (!old || !hasJapaneseFont()) return
         if (file.delete()) {
-            Log.i(TAG, "font.tmp: deleted the old one (kanji were '?'); it will be made again from the device font")
+            Log.i(TAG, "font.tmp: deleted the old one ($reason); it will be made again")
         } else {
             Log.w(TAG, "font.tmp: could not delete the old one")
         }
+    }
+
+    private fun madeByApp(file: File, madeAt: Long): Boolean {
+        if (madeAt <= 0) return false
+        val t = file.lastModified()
+        return t >= madeAt - MADE_BEFORE_MS && t <= madeAt + MADE_AFTER_MS
     }
 
     /**
@@ -109,52 +130,7 @@ object FontGlyphs {
         }
     }
 
-    private fun japanesePaint() = Paint().apply { textLocale = Locale.JAPAN }
-
-    private fun hasJapaneseFont(): Boolean {
-        val p = japanesePaint()
-        return p.hasGlyph("亜") && p.hasGlyph("あ")
-    }
-
-    /**
-     * 日本語フォント。Android 10 以上は、システムが日本語に使うフォントを先頭に置き、
-     * 無い字はシステムのフォントで補う。それより前は、既定のフォントを日本語の字体で使う。
-     * 返す名前はログと報告のため
-     */
-    private fun japaneseTypeface(): Pair<Typeface, String> {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            runCatching {
-                val ja = SystemFonts.getAvailableFonts().filter { f ->
-                    val locales = f.localeList
-                    (0 until locales.size()).any { locales.get(it).language == "ja" } &&
-                        f.style.weight == FontStyle.FONT_WEIGHT_NORMAL &&
-                        f.style.slant == FontStyle.FONT_SLANT_UPRIGHT
-                }
-                // システムが日本語に使っているもの (既定のフォントで描いた「亜あ」と同じ形になるもの) を選ぶ
-                val ref = sample(Typeface.DEFAULT)
-                for (f in ja) {
-                    val tf = Typeface.CustomFallbackBuilder(FontFamily.Builder(f).build())
-                        .setSystemFallback("sans-serif").build()
-                    if (sample(tf).contentEquals(ref)) {
-                        return tf to "${f.file?.name ?: "?"}#${f.ttcIndex}"
-                    }
-                }
-            }.onFailure { Log.w(TAG, "font lookup failed", it) }
-        }
-        return Typeface.DEFAULT to "default (ja)"
-    }
-
-    private fun sample(tf: Typeface): IntArray {
-        val bmp = Bitmap.createBitmap(64, 32, Bitmap.Config.ARGB_8888)
-        val p = japanesePaint().apply { typeface = tf; textSize = 24f; color = Color.BLACK }
-        Canvas(bmp).drawText("亜あ", 0f, 26f, p)
-        val px = IntArray(64 * 32)
-        bmp.getPixels(px, 0, 64, 0, 0, 64, 32)
-        bmp.recycle()
-        return px
-    }
-
-    /** Shift JIS (MS932。NEC 特殊文字を含む) で読む */
+    /** Shift JIS (MS932。NEC 特殊文字・NEC 選定 IBM 拡張文字を含む) で読む */
     private fun sjisCharset(): Charset {
         for (name in arrayOf("windows-31j", "MS932", "Shift_JIS")) {
             runCatching { return Charset.forName(name) }
@@ -176,32 +152,32 @@ object FontGlyphs {
         return s.takeIf { it.isNotEmpty() && it != "�" && it[0].code >= 0x80 }
     }
 
-    /** 半角 (Shift JIS の 1 バイト) の字。PC-98 の 5C は ¥、7C は ¦、7E は ‾ (FONT.ROM と同じ) */
-    private fun ankToString(code: Int): String? = when (code) {
-        0x5c -> "¥"
-        0x7c -> "¦"
-        0x7e -> "‾"
-        in 0x20..0x7e -> code.toChar().toString()
-        in 0xa1..0xdf -> (0xff61 + code - 0xa1).toChar().toString()
-        else -> null
-    }
+    private fun marked(data: ByteArray, base: Int, i: Int) =
+        (data[base + (i shr 3)].toInt() and (0x80 ushr (i and 7))) != 0
 
     /**
-     * エミュレータのスレッドから JNI で呼ばれる。全部の字を描いたバイト列 (形は port/androidfont.c) を返す。
-     * 日本語フォントが無いときや、描けなかったときは null (今までどおり英数字だけの font.tmp になる)
+     * エミュレータのスレッドから JNI で呼ばれる。全部の字のバイト列 (形は port/androidfont.c) を返す。
+     * font16.bin が読めなかったときは null (今までどおり英数字だけの font.tmp になる)
      */
     fun render(): ByteArray? {
         return try {
-            if (!hasJapaneseFont()) {
-                Log.i(TAG, "font.tmp: no Japanese font on this device")
+            val am = assets ?: run {
+                Log.w(TAG, "font.tmp: assets not ready")
                 return null
             }
             val start = SystemClock.uptimeMillis()
             progress?.invoke(true)
-            val (tf, name) = japaneseTypeface()
-            val out = renderTable(tf, ANTI_ALIAS, THRESHOLD)
-            settings?.fontTmpVersion = VERSION
-            Log.i(TAG, "font.tmp: glyphs from $name in ${SystemClock.uptimeMillis() - start} ms")
+            val data = am.open(ASSET).use { it.readBytes() }
+            require(data.size == MAGIC.size + ANK_SIZE + KNJ_SIZE + ANK_MARK + KNJ_MARK &&
+                data.copyOfRange(0, MAGIC.size).contentEquals(MAGIC)) { "$ASSET: bad data" }
+            val out = data.copyOfRange(MAGIC.size, MAGIC.size + ANK_SIZE + KNJ_SIZE)
+            val drawn = drawMissing(data, out)
+            settings?.let {
+                it.fontTmpVersion = VERSION
+                it.fontTmpMadeAt = System.currentTimeMillis()
+            }
+            Log.i(TAG, "font.tmp: glyphs from $ASSET, $drawn from the device font, " +
+                "in ${SystemClock.uptimeMillis() - start} ms")
             out
         } catch (t: Throwable) {
             Log.e(TAG, "font.tmp: render failed", t)
@@ -211,90 +187,57 @@ object FontGlyphs {
         }
     }
 
-    /** ink の画素 (濃さが threshold 以上) を 1 にして、左から bits ビット分を返す */
-    private fun row(px: IntArray, base: Int, bits: Int, threshold: Int): Int {
-        var v = 0
-        for (x in 0 until bits) {
-            if ((px[base + x] ushr 24) >= threshold) v = v or (0x8000 ushr x)
-        }
-        return v
-    }
-
-    private fun renderTable(tf: Typeface, antiAlias: Boolean, threshold: Int, ankTf: Typeface = tf): ByteArray {
-        val out = ByteArray(ANK_SIZE + KNJ_SIZE)
-        val paint = japanesePaint().apply {
-            typeface = tf
-            isAntiAlias = antiAlias
+    /**
+     * font16.bin に無い全角の字を、端末のフォントで描いて out に入れる。描いた字の数を返す。
+     * アンチエイリアスなしで描く (しきい値で切るやり方は、16 ドットでは細い線が消えるか、太りすぎた)。
+     * 上下は「国」の中心を 8 ドット目に合わせる (東雲の漢字も 1〜14 段で、中心が同じ)
+     */
+    private fun drawMissing(data: ByteArray, out: ByteArray): Int {
+        val markBase = MAGIC.size + ANK_SIZE + KNJ_SIZE + ANK_MARK
+        val cs = sjisCharset()
+        val paint = Paint().apply {
+            textLocale = Locale.JAPAN
+            typeface = Typeface.DEFAULT
+            isAntiAlias = false
             color = Color.BLACK
             textSize = 16f
         }
-        // 全角は「国」の上下の中心を 16 ドットの中心に合わせる (どの字も同じ高さに置く)
         val bounds = Rect()
         paint.getTextBounds("国", 0, 1, bounds)
-        val kBase = 8f - (bounds.top + bounds.bottom) / 2f
-
-        val cols = 94
-        val bmp = Bitmap.createBitmap(cols * 16, 16, Bitmap.Config.ARGB_8888)
+        val base = 8f - (bounds.top + bounds.bottom) / 2f
+        val bmp = Bitmap.createBitmap(16, 16, Bitmap.Config.ARGB_8888)
         val canvas = Canvas(bmp)
-        val px = IntArray(cols * 16 * 16)
-
-        // ---- 半角 (英数字・半角カナ) は 8x16。字幅が 8 を超えるものは横を縮める
-        bmp.eraseColor(Color.TRANSPARENT)
-        val ank = (0 until 256).map { ankToString(it) }
-        for (half in 0 until 2) {
-            bmp.eraseColor(Color.TRANSPARENT)
-            for (i in 0 until 128) {
-                val s = ank[half * 128 + i] ?: continue
-                // 半角カナは日本語フォントで描く
-                paint.typeface = if (half == 0) ankTf else tf
-                if (!paint.hasGlyph(s)) continue
-                val w = paint.measureText(s)
-                val scale = if (w > 8f) 8f / w else 1f
-                paint.textScaleX = scale
-                canvas.save()
-                canvas.clipRect(i * 8, 0, i * 8 + 8, 16)
-                canvas.drawText(s, i * 8 + (8f - w * scale) / 2f, kBase, paint)
-                canvas.restore()
-                paint.textScaleX = 1f
-            }
-            bmp.getPixels(px, 0, cols * 16, 0, 0, cols * 16, 16)
-            for (i in 0 until 128) {
-                val code = half * 128 + i
-                for (y in 0 until 16) {
-                    out[code * 16 + y] = (row(px, y * cols * 16 + i * 8, 8, threshold) shr 8).toByte()
+        val px = IntArray(16 * 16)
+        val perKu = StringBuilder()
+        var total = 0
+        try {
+            for (ku in 0 until 94) {
+                var n = 0
+                for (ten in 0 until 94) {
+                    if (marked(data, markBase, ku * 94 + ten)) continue
+                    val s = kutenToString(cs, ku, ten) ?: continue
+                    if (!paint.hasGlyph(s)) continue          // フォントにも無い字 (豆腐になるもの) は空白
+                    bmp.eraseColor(Color.TRANSPARENT)
+                    canvas.drawText(s, (16f - paint.measureText(s)) / 2f, base, paint)
+                    bmp.getPixels(px, 0, 16, 0, 0, 16, 16)
+                    val o = ANK_SIZE + (ku * 94 + ten) * 32
+                    for (y in 0 until 16) {
+                        var v = 0
+                        for (x in 0 until 16) {
+                            if ((px[y * 16 + x] ushr 24) >= 128) v = v or (0x8000 ushr x)
+                        }
+                        out[o + y * 2] = (v shr 8).toByte()
+                        out[o + y * 2 + 1] = v.toByte()
+                    }
+                    n++
                 }
+                if (n > 0) perKu.append(" ku${ku + 1}=$n")
+                total += n
             }
+        } finally {
+            bmp.recycle()
         }
-
-        paint.typeface = tf
-
-        // ---- 全角は 16x16。1 区ずつ (94 字を横に並べて) 描く
-        val cs = sjisCharset()
-        for (ku in 0 until 94) {
-            bmp.eraseColor(Color.TRANSPARENT)
-            var any = false
-            for (ten in 0 until 94) {
-                val s = kutenToString(cs, ku, ten) ?: continue
-                if (!paint.hasGlyph(s)) continue          // フォントに無い字 (豆腐になるもの) は空白
-                val w = paint.measureText(s)
-                canvas.save()
-                canvas.clipRect(ten * 16, 0, ten * 16 + 16, 16)
-                canvas.drawText(s, ten * 16 + (16f - w) / 2f, kBase, paint)
-                canvas.restore()
-                any = true
-            }
-            if (!any) continue
-            bmp.getPixels(px, 0, cols * 16, 0, 0, cols * 16, 16)
-            for (ten in 0 until 94) {
-                val o = ANK_SIZE + (ku * 94 + ten) * 32
-                for (y in 0 until 16) {
-                    val v = row(px, y * cols * 16 + ten * 16, 16, threshold)
-                    out[o + y * 2] = (v shr 8).toByte()
-                    out[o + y * 2 + 1] = v.toByte()
-                }
-            }
-        }
-        bmp.recycle()
-        return out
+        if (total > 0) Log.i(TAG, "font.tmp: device font:$perKu")
+        return total
     }
 }

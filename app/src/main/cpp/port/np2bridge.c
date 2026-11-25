@@ -160,7 +160,7 @@ static void notify(int type, int a, int b, const char *text)
 }
 
 /**
- * ANDROID-FONT: Kotlin (Np2Native.renderFontGlyphs) に端末の日本語フォントで字を描いてもらう。
+ * ANDROID-FONT: Kotlin (Np2Native.renderFontGlyphs) から字の形をもらう (東雲フォントなど。FontGlyphs.kt)。
  * font.tmp を作るとき (makepc98bmp) に、エミュレータスレッドから呼ぶ。
  * 返すのは _MALLOC したバイト列 (形は androidfont.c)。描けなかったときは NULL
  */

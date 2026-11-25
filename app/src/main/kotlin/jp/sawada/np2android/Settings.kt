@@ -98,12 +98,20 @@ class Settings(context: Context) {
         set(v) = prefs.edit().putBoolean("file_manager_notice_shown", v).apply()
 
     /**
-     * font.tmp を作った仕組みの版 ([FontGlyphs.VERSION])。端末の日本語フォントから作ったときだけ記録する (Q15)。
+     * font.tmp を作った仕組みの版 ([FontGlyphs.VERSION])。字の形を渡せたときだけ記録する (Q15)。
      * 0 は記録なし (a22 までは英数字だけの font.tmp を作っていた)
      */
     var fontTmpVersion: Int
         get() = prefs.getInt("font_tmp_version", 0)
         set(v) = prefs.edit().putInt("font_tmp_version", v).apply()
+
+    /**
+     * font.tmp の字の形を渡した時刻 (System.currentTimeMillis)。font.tmp の更新時刻と比べて、
+     * このアプリが作ったものかを見分ける (版 2 から。0 は記録なし)
+     */
+    var fontTmpMadeAt: Long
+        get() = prefs.getLong("font_tmp_made_at", 0L)
+        set(v) = prefs.edit().putLong("font_tmp_made_at", v).apply()
 
     companion object {
         const val ORIENTATION_AUTO = 0

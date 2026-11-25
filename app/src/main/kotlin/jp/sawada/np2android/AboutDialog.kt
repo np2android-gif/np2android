@@ -23,6 +23,7 @@ object AboutDialog {
         Component("Neko Project 21/W (Windows NT 用ホストドライブ・hstdrvnt、FDC)", "修正 BSD ライセンス (3 条項)", "np21w.txt"),
         Component("SDL2", "zlib ライセンス", "sdl2.txt"),
         Component("zlib", "zlib ライセンス", "zlib.txt"),
+        Component("東雲フォント・JFドットJISKan16s (漢字のフォント)", "パブリックドメイン", "fonts.txt"),
     )
 
     private fun builder(ctx: Context) = AlertDialog.Builder(ctx, android.R.style.Theme_DeviceDefault_Dialog_Alert)

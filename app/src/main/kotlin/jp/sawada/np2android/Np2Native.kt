@@ -181,7 +181,7 @@ object Np2Native {
 
     /**
      * ANDROID-FONT: font.tmp を作るときに、エミュレータスレッドから JNI で呼ばれる。
-     * 端末の日本語フォントで描いた全部の字を返す ([FontGlyphs.render])。描けなければ null
+     * 全部の字の形を返す ([FontGlyphs.render]。東雲フォントなど、無い字は端末のフォント)。渡せなければ null
      */
     @JvmStatic
     fun renderFontGlyphs(): ByteArray? = FontGlyphs.render()

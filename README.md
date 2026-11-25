@@ -46,8 +46,8 @@ FDD・HDD・CD-ROM のイメージの処理には **NP2kai** のコードを、W
 
 ### 漢字のフォント
 
-- 実機のフォント（FONT.ROM など）が無くても、DOS や Windows 2000 のテキスト画面に漢字が出ます。初めて起動したときに、端末の日本語フォントから作業フォルダに `font.tmp`（漢字 ROM の代わり）を作ります。数秒かかり、その間「フォントを準備しています」と出ます（v0.86-a23 から）。
-- 字の形は端末のフォントなので、実機の字とは違います。実機の字を使いたいときは、作業フォルダに `FONT.ROM`（または `FONT.BMP`）を置いてください。そちらが優先されます。
+- 実機のフォント（FONT.ROM など）が無くても、DOS や Windows 2000 のテキスト画面に漢字が出ます。初めて起動したときに、アプリに入っている 16 ドットのフォント（[東雲フォント](http://openlab.ring.gr.jp/efont/shinonome/)と[JFドットJISKan16s](http://jikasei.me/font/jf-dotfont/)。どちらもパブリックドメイン）から、作業フォルダに `font.tmp`（漢字 ROM の代わり）を作ります（v0.86-a23 から）。どちらにも無い字（NEC 選定 IBM 拡張文字のまれな漢字など 86 字）だけ、端末のフォントで描きます。
+- 字の形は実機の字とは違います。実機の字を使いたいときは、作業フォルダに `FONT.ROM`（または `FONT.BMP`）を置いてください。そちらが優先されます。
 - `font.tmp` を消すと、次に起動したときに作り直します。
 - v0.86-a22 までに作られた `font.tmp` は、漢字が「?」になっていました。v0.86-a23 に更新して最初に起動したときに、自動で作り直します（外から写した `font.tmp` はそのまま使います）。
 
@@ -288,5 +288,6 @@ Android 版のために書いたコードは修正 BSD ライセンスです（[
 | Neko Project 21/W の Windows NT 用ホストドライブと、そのゲスト用ドライバ hstdrvnt、FDC（io/fdc.c）と DMA の番地の上位 8 ビット（io/dmac.c の一部）（SimK 氏、NP2 developer team） | 修正 BSD ライセンス（3 条項） |
 | SDL2 | zlib ライセンス |
 | zlib | zlib ライセンス |
+| 東雲フォント（古川泰之氏、/efont/）、JFドットJISKan16s（自家製フォント工房。jiskan16：電子情報技術産業協会・安岡孝一氏・今村俊幸氏・花高信哉氏） | パブリックドメイン（作り方は [tools/font16/README.md](tools/font16/README.md)） |
 
-Neko Project II・Xnp2・NP2kai・Neko Project 21/W を作り、ソースを公開してくださった方々に感謝します。
+Neko Project II・Xnp2・NP2kai・Neko Project 21/W を作り、ソースを公開してくださった方々に感謝します。漢字のフォントは、東雲フォントと JFドットJISKan16s（もとの jiskan16）を作り、自由に使えるように公開してくださった方々のおかげです。

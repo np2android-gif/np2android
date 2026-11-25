@@ -39,7 +39,7 @@ enum {
 void np2bridge_sysiomsk(void);
 
 /**
- * ANDROID-FONT: Kotlin に端末の日本語フォントで字を描いてもらい、_MALLOC したバイト列を返す
+ * ANDROID-FONT: Kotlin から字の形 (東雲フォントなど) をもらい、_MALLOC したバイト列を返す
  * (形は androidfont.c)。描けなかったときは NULL。エミュレータスレッドから呼ぶ
  */
 UINT8 *np2bridge_renderfont(UINT *size);

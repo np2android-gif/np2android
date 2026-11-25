@@ -80,7 +80,7 @@ class Np2Activity : SDLActivity(), KeyboardController.Actions, Np2Menu.Host, Set
         // I/O ポートの見分け方 (np2.cfg には保存しない)。最初のリセットより前に反映される
         settings.applySysIoMask()
         // a22 までの「?」の font.tmp は消して、端末の日本語フォントで作り直させる (Q15)
-        FontGlyphs.prepare(DiskImages.dataDir(this), settings)
+        FontGlyphs.prepare(this, DiskImages.dataDir(this), settings)
         FontGlyphs.progress = { show -> runOnUiThread { showFontProgress(show) } }
         if (startup.lost.isNotEmpty()) {
             dialog()
