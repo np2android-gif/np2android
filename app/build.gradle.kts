@@ -1,3 +1,4 @@
+import java.security.MessageDigest
 import java.util.Properties
 
 plugins {
@@ -12,6 +13,35 @@ val keystoreProps = Properties().apply {
     val f = rootProject.file("keystore.properties")
     if (f.exists()) f.inputStream().use { load(it) }
 }
+
+/**
+ * font16.bin を作り直したのに FontGlyphs.VERSION を上げ忘れると、もう作った font.tmp が作り直されない。
+ * 今の font16.bin の SHA-256 が、tools/font16/versions.txt の今の VERSION の行と合うかを確かめる。
+ */
+val checkFont16 = tasks.register("checkFont16") {
+    val bin = file("src/main/assets/font16.bin")
+    val kt = file("src/main/kotlin/jp/sawada/np2android/FontGlyphs.kt")
+    val table = rootProject.file("tools/font16/versions.txt")
+    inputs.files(bin, kt, table)
+    doLast {
+        val version = Regex("""const val VERSION = (\d+)""").find(kt.readText())?.groupValues?.get(1)
+            ?: throw GradleException("FontGlyphs.kt に VERSION が見つかりません")
+        val sha = MessageDigest.getInstance("SHA-256").digest(bin.readBytes())
+            .joinToString("") { "%02x".format(it) }
+        val rows = table.readLines().map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") }
+            .map { it.split(Regex("""\s+""")) }
+        val want = rows.firstOrNull { it[0] == version }?.get(1)
+        if (want != sha) {
+            val other = rows.firstOrNull { it[1] == sha }?.get(0)
+            throw GradleException(
+                "font16.bin (SHA-256 $sha) が FontGlyphs.VERSION = $version と合いません" +
+                    (if (other != null) " (この font16.bin は版 $other のもの)" else "") +
+                    "。font16.bin を変えたら VERSION を上げ、tools/font16/versions.txt に行を足してください"
+            )
+        }
+    }
+}
+tasks.named("preBuild") { dependsOn(checkFont16) }
 
 android {
     namespace = "jp.sawada.np2android"

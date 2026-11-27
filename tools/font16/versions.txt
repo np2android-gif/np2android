@@ -1,0 +1,6 @@
+# FontGlyphs.VERSION と、その版の app/src/main/assets/font16.bin の SHA-256。
+# ビルドのとき (app/build.gradle.kts の checkFont16) に、今の font16.bin の SHA-256 が今の VERSION の行と
+# 合うかを確かめる。font16.bin を作り直したら、VERSION を上げてここに 1 行足す。
+# 版  SHA-256
+2  bd6e8007d6039a1ba80c17be6bce3a114d7aa4d80070be384f0e9e642ea3e768
+3  6bcffcf18e1238dce7568226fde7c3a31c6e980f25cc93e698d7824249afcca4

@@ -34,9 +34,11 @@ object FontGlyphs {
 
     /**
      * font.tmp を作る仕組みの版。字の形を変えて作り直させたいときに上げる ([Settings.fontTmpVersion])。
-     * 1: 端末のフォント (a23 の前のテスト版だけ)、2: 東雲フォント + JFドットJISKan16s
+     * 1: 端末のフォント (a23 の前のテスト版だけ)、2: 東雲フォント + JFドットJISKan16s、
+     * 3: 2 に手直しした字 (tools/font16/override/) を足したもの。font16.bin を変えたら上げ、
+     * tools/font16/versions.txt に版と font16.bin の SHA-256 を書く (ビルドのときに確かめる)
      */
-    const val VERSION = 2
+    const val VERSION = 3
 
     private const val TAG = "np2font"
     private const val ASSET = "font16.bin"

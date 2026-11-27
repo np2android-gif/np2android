@@ -15,7 +15,7 @@
 
 - 全角: 東雲の `shnmk16.bdf`（JIS X 0208）を、JIS の区点のまま置きます。東雲に無い所（13 区の NEC 特殊文字、89〜92 区の NEC 選定 IBM 拡張文字）は、Shift JIS を MS932 で Unicode にして、JFドットJISKan16s の中にある 16 ドットのビットマップ（EBDT、16ppem）をそのまま使います。TTF の輪郭は描かず、TTF も同梱しません。
 - 半角: 東雲の `shnm8x16r.bdf`（JIS X 0201。5C は ¥）を使います。7C と 7E は、実機の漢字 ROM に合わせて、`shnm8x16a.bdf` の ¦（A6）と ~（7E）にします。
-- どちらにも無い字（89〜92 区のまれな漢字と、∑・￤ の 86 字）は、アプリが端末のフォントで描きます。
+- どちらにも無い字（89〜92 区のまれな漢字と、∑・￤ の 86 字）は、`override/` の手直しした字を使います（下の「手直しした字」）。今は 86 字すべてそろっているので、アプリが端末のフォントで描く字はありません。
 - 字は拡大・縮小せず、16 ドットのまま置きます。
 
 ## 作り方
@@ -28,7 +28,7 @@ unzip jfdotfont-20150527.zip JF-Dot-jiskan16s.ttf
 python mkfont16.py build shinonome-0.9.11 JF-Dot-jiskan16s.ttf ../../app/src/main/assets/font16.bin
 ```
 
-区ごとに、どのフォントの字を入れたか（差し替えた字は override）を表示します。`override/` の字を使わずに上の 2 つだけから作ると（`--no-override`）、東雲 6,879 字・JISKan16s 371 字、287,993 バイトで、SHA-256 は bd6e8007d6039a1ba80c17be6bce3a114d7aa4d80070be384f0e9e642ea3e768 です（fontTools 4.68.0）。
+区ごとに、どのフォントの字を入れたか（差し替えた字は override）を表示します。今の `override/` で作ると、東雲 6,746 字・JISKan16s 371 字・差し替え 219 字、287,993 バイトで、SHA-256 は 6bcffcf18e1238dce7568226fde7c3a31c6e980f25cc93e698d7824249afcca4 です（FontGlyphs.VERSION 3）。`override/` の字を使わずに上の 2 つだけから作ると（`--no-override`）、東雲 6,879 字・JISKan16s 371 字、287,993 バイトで、SHA-256 は bd6e8007d6039a1ba80c17be6bce3a114d7aa4d80070be384f0e9e642ea3e768 です（fontTools 4.68.0）。
 
 ファイルの形は `mkfont16.py` の先頭に書いてあります。
 
@@ -52,6 +52,15 @@ python mkfont16.py build shinonome-0.9.11 JF-Dot-jiskan16s.ttf ../../app/src/mai
 
 3. PNG と CSV を、同じ名前のまま `override/` に置きます。CSV の「作り方」の列には、元にした字や直した所を書いておきます（`build` は「マス」と「区点」の列だけを読みます）。同じ字が 2 つのファイルにあると止まります。
 
-4. `build` で font16.bin を作り直します。font16.bin が変わったら、アプリの `FontGlyphs.VERSION` を上げます（上げないと、もう作った font.tmp が作り直されません）。
+4. `build` で font16.bin を作り直します。font16.bin が変わったら、今後も必ずアプリの `FontGlyphs.VERSION` を上げ、`versions.txt` に新しい版と font16.bin の SHA-256 の行を足します（上げないと、もう作った font.tmp が作り直されません）。アプリのビルドのとき（`checkFont16`）に、font16.bin の SHA-256 が今の版の行と合わないと止まります。
 
 `override/` の字は、持ち主や Claude Code が東雲・JISKan16s を元に作ったもので、東雲と同じくパブリックドメインとして扱います。
+
+## 手直しした字（override/）
+
+| ファイル | 字の数 | 中身 |
+| --- | --- | --- |
+| `b_ibm86` | 86 | 東雲にも JISKan16s にも無い字（13 区の ∑、89〜92 区のまれな漢字、IBM の異体字、￤）。東雲・JISKan16s の字の部品を組み合わせたり点を直したりして作り、持ち主が直した |
+| `c_jis2004` | 133 | JIS X 0213:2004 で例示字形が変わった字（飴・餅・しんにょうの字など）を改正後の形にしたもの。JISKan16s の 2000 年版から 2004 年版への違いを東雲の字に当てた下書きを、持ち主が直した。東雲のままにすると決めた字は入れていない |
+
+字ごとの作り方は、それぞれの CSV の「作り方」の列にあります。
