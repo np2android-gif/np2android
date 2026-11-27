@@ -143,6 +143,11 @@ static void bios_reinitbyswitch(void) {
 							   どちらも 0 だと Windows が知らない種類になってキーボードが効かない */
 	mem[MEMB_BIOS_FLAG3] |= 0x40;
 #endif
+#if defined(__ANDROID__)	/* ANDROID-SERIAL: PC-9821 の機能フラグ F8E80h+11h の bit4 (115200bps に対応) を立てる。NP21/W と同じ。
+							   Windows 2000 の NTDETECT はこれを見て内蔵の COM1 を FIFO 付き (*nEC1502) と報告する。
+							   0 だと *nEC1501 になり、合う INF が無いので「その他のデバイス」になる */
+	mem[0xf8e80 + 0x11] |= 0x10;
+#endif
 	extmem = pccore.extmem;
 	extmem = min(extmem, 14);
 	mem[MEMB_EXPMMSZ] = (UINT8)(extmem << 3);

@@ -286,7 +286,7 @@ Android 版のために書いたコードは修正 BSD ライセンスです（[
 | FPU エミュレーション（NP2kai、NONAKA Kimihiro 氏・SimK 氏） | BSD ライセンス |
 | Berkeley SoftFloat 3e（The Regents of the University of California） | BSD ライセンス（3 条項） |
 | NP2kai（AZO234 氏ほか） | MIT ライセンス |
-| Neko Project 21/W の Windows NT 用ホストドライブと、そのゲスト用ドライバ hstdrvnt、FDC（io/fdc.c）と DMA の番地の上位 8 ビット（io/dmac.c の一部）（SimK 氏、NP2 developer team） | 修正 BSD ライセンス（3 条項） |
+| Neko Project 21/W の Windows NT 用ホストドライブと、そのゲスト用ドライバ hstdrvnt、FDC（io/fdc.c）と DMA の番地の上位 8 ビット（io/dmac.c の一部）、BIOS の機能フラグ 1 か所（bios/bios.c）（SimK 氏、NP2 developer team） | 修正 BSD ライセンス（3 条項） |
 | SDL2 | zlib ライセンス |
 | zlib | zlib ライセンス |
 | 東雲フォント（古川泰之氏、/efont/）、JFドットJISKan16s（自家製フォント工房。jiskan16：電子情報技術産業協会・安岡孝一氏・今村俊幸氏・花高信哉氏） | パブリックドメイン（作り方は [tools/font16/README.md](tools/font16/README.md)） |
