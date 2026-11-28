@@ -6,6 +6,8 @@
  *   - 1 本指ドラッグ        : マウス移動 (相対)
  *   - 1 本指タップ          : 左クリック (DOUBLETAP_GAP だけ待ってから送る)
  *   - タップ直後に押して保持 : 左ボタンを押したままドラッグ (ダブルタップ＝ダブルクリック)
+ *   - 設定で「タップして押し直すとドラッグ」をオフにすると (np2bridge_tapdrag = 0)、タップのクリックを
+ *     待たずに送る。タップ直後に押して保持すると Q14 より前と同じく左ボタンを押す (ゲストにはダブルクリック)
  *   - 2 本指タップ          : 右クリック
  *   - ソフトキーの L・R を押している間は、指はカーソルを動かすだけ (タップ・2 本指タップ・
  *     タップして押し直すドラッグは出さない)
@@ -58,6 +60,7 @@ typedef struct {
 	UINT32			lasttap;				/* 直近のタップ時刻 (0 = 送っていないクリックは無い) */
 	BOOL			secondtap;				/* このドラッグはタップの直後に押し直したもの */
 	BOOL			bykey;					/* このジェスチャ中にソフトキーの L・R が押されていた */
+	UINT32			lastclick;				/* ANDROID-MOUSE: 待たずに送ったタップのクリックの時刻 (0 = 無し。Q17) */
 } TOUCHPAD;
 
 static	TOUCHPAD	s_touch;
@@ -245,7 +248,15 @@ static void touch_down(const SDL_TouchFingerEvent *f) {
 			mousemng_hold(MOUSEMNG_LEFT, MOUSEMNG_BYTOUCH, TRUE);
 			TOUCHLOG("drag start (left down)");
 		}
+		else if ((!s_touch.bykey) && (s_touch.lastclick != 0) && ((now - s_touch.lastclick) < DOUBLETAP_GAP)) {
+			/* ANDROID-MOUSE: タップのクリックを待たずに送ったすぐ後に押した (Q17、Q14 より前と同じ動き)。
+			   ボタンを押すので、ゲストにはダブルクリックの 2 回目に見える。離すときにクリックは足さない */
+			s_touch.dragging = TRUE;
+			mousemng_hold(MOUSEMNG_LEFT, MOUSEMNG_BYTOUCH, TRUE);
+			TOUCHLOG("re-press after click (left down)");
+		}
 		s_touch.lasttap = 0;
+		s_touch.lastclick = 0;
 	}
 	if (key_held()) {
 		s_touch.bykey = TRUE;
@@ -308,6 +319,12 @@ static void touch_up(const SDL_TouchFingerEvent *f) {
 		if (s_touch.maxcount > 0) {
 			TOUCHLOG("move with key held: fingers=%d moved=%.1f", s_touch.maxcount, s_touch.moved);
 		}
+	}
+	else if (quick && (s_touch.maxcount == 1) && (!np2bridge_tapdrag)) {
+		/* ANDROID-MOUSE: 「タップして押し直すとドラッグ」がオフ。クリックを待たずに送る (Q17) */
+		mousemng_click(MOUSEMNG_LEFT);
+		s_touch.lastclick = (now != 0) ? now : 1;
+		TOUCHLOG("tap -> left click (no wait)");
 	}
 	else if (quick && (s_touch.maxcount == 1)) {
 		s_touch.lasttap = now;		/* クリックは touch_update で DOUBLETAP_GAP の後に送る */

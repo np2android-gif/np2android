@@ -204,6 +204,16 @@ SD カードなどが今は開けないとき (Kotlin の DiskImageSource・Np2A
   マウントの見え方で値が変わるかを確かめていないので使っていない。CD-ROM は読むだけなので、今までどおり
   仮想パスが同じときだけ止める。FDD と HDD は拡張子が重ならないので、同じファイルが両方に入ることはない。
 
+新しいディスクイメージ (newdisk.c、印 ANDROID-HDD、Q17)
+  newdisk.c は xnp2 のもの (np2kai から取り込んだものではない)。
+  - newdisk_nhd: 作れる大きさを 512MB から 4096MB に上げた (アプリの一覧は 1GB・2GB・4GB を足した)。
+    形は今までどおり 8 ヘッド・17 セクタ・シリンダは MB × 15 で、4096MB で 61,440 シリンダ、
+    ファイルは 4,278,190,592 バイト。IDENTIFY の 16 ビットの欄にも、32 ビットの大きさにも収まる。
+    アプリは 64 ビット (arm64・x86_64) だけなので、2GB を超えるファイルの位置も扱える。
+  - writehddipl: 0 を 1KB ずつではなく 64KB ずつ書く (4GB を作る時間を減らすため)。
+  - hdd (SCSI) は 512MB のまま。
+
+
 ライセンス
   hdd_vhd.h の先頭に「license: same as xnp2 (under the 2-clause BSD)」(lpproj 氏・SimK 氏) とある。
   ほかのファイルには個別の表記がなく、np2kai 全体のライセンス (diskimage/README-ANDROID.txt を参照) が

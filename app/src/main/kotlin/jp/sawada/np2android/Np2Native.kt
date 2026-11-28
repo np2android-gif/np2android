@@ -33,6 +33,11 @@ object Np2Native {
     @JvmStatic external fun mouseMove(dx: Int, dy: Int)
     /** タッチパッド操作の移動倍率 (1.0 = 指の移動量どおり) */
     @JvmStatic external fun setMouseSpeed(speed: Float)
+    /**
+     * 「タップして押し直すとドラッグ」を使うか (Q17)。true (既定) なら 1 回のタップのクリックを 300ms 待ってから送る。
+     * false なら待たずに送る (タップして押し直すと、Q14 より前と同じくダブルクリックになる)
+     */
+    @JvmStatic external fun setTapDrag(enabled: Boolean)
 
     // ---- ディスク (path = null で取り出し) ----
     @JvmStatic external fun setFdd(drive: Int, path: String?)
@@ -85,6 +90,33 @@ object Np2Native {
     const val NEWDISK_HDI = 1
     const val NEWDISK_NHD = 2
     const val NEWDISK_VHD = 3
+
+    /**
+     * np2 本体の拡張メモリと CPU 倍率 (np2.cfg の ExMemory・clk_mult。内蔵メニューと同じ値、Q17)。
+     * [MachineCfg] の順の配列を返す。UI スレッドから呼んでよい
+     */
+    @JvmStatic external fun getMachineCfg(): IntArray?
+    /**
+     * 拡張メモリ (MB) と CPU 倍率を np2.cfg に保存する。効くのは次のリセットから (勝手にはリセットしない)。
+     * 範囲の外の値は無視される
+     */
+    @JvmStatic external fun setMachineCfg(extMem: Int, multiple: Int)
+
+    /** [getMachineCfg] の中身 */
+    class MachineCfg(a: IntArray) {
+        /** np2.cfg の値 (次のリセットから効く) */
+        val extMem = a[0]
+        val multiple = a[1]
+        /** ベースクロック (Hz。2457600 か 1996800) */
+        val baseClock = a[2]
+        /** 今動いている値 (リセットかステートロードのときに決まる) */
+        val runningExtMem = a[3]
+        val runningMultiple = a[4]
+        val maxExtMem = a[5]
+        val maxMultiple = a[6]
+    }
+
+    fun machineCfg(): MachineCfg? = getMachineCfg()?.takeIf { it.size >= 7 }?.let { MachineCfg(it) }
 
     /** 使用中 (またはリセット後に使う) ディスクイメージのパス。要素は null のことがある */
     @JvmStatic external fun getDisksInUse(): Array<String?>?

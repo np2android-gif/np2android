@@ -34,6 +34,7 @@
 #define LOG_TAG "np2"
 
 float np2bridge_mousespeed = 1.0f;
+volatile int np2bridge_tapdrag = 1;		/* ANDROID-MOUSE: タップして押し直すドラッグ (Q17) */
 
 /* ---- Kotlin へのコールバック (エミュレータスレッドから呼ぶ) ---------------- */
 
@@ -285,6 +286,13 @@ NP2JNI(setMouseSpeed)(JNIEnv *env, jclass cls, jfloat speed)
 	np2bridge_mousespeed = speed;
 }
 
+/* ANDROID-MOUSE: 「タップして押し直すとドラッグ」を使うか (Q17)。int 1 個の書き込みなので、移動倍率と同じく
+   エミュレータのスレッドへは送らず直接書く。待っているタップのクリックは、オフにしても touch_update が送る */
+NP2JNI(setTapDrag)(JNIEnv *env, jclass cls, jboolean enabled)
+{
+	np2bridge_tapdrag = enabled ? 1 : 0;
+}
+
 NP2JNI(setFdd)(JNIEnv *env, jclass cls, jint drive, jstring path)
 {
 	push(NP2CMD_SETFDD, drive, (intptr_t)dupstring(env, path));
@@ -366,6 +374,63 @@ NP2JNI(setSysIoMask)(JNIEnv *env, jclass cls, jboolean port16)
 {
 	SDL_AtomicSet(&s_sysiomsk, (port16) ? 0xff00 : 0x0000);
 	push(NP2CMD_SETSYSIOMSK, 0, 0);		/* 起動前で積めなくても、起動時に np2bridge_sysiomsk() が読む */
+}
+
+/*
+ * ANDROID-CFG: アプリの「設定」の拡張メモリと CPU 倍率 (Q17)。設定の正は np2.cfg (np2cfg.EXTMEM・multiple) で、
+ * 内蔵メニューと同じ値を読み書きする。Kotlin の Settings には持たない。
+ * 戻り値は {設定の拡張メモリ (MB), 設定の倍率, ベースクロック (Hz), 今動いている拡張メモリ, 今動いている倍率,
+ * 拡張メモリの上限, 倍率の上限}。どれも int 1 個ずつの読み出しなので、UI スレッドから直接読む
+ * (エミュレータのスレッドと重なっても、表示が一瞬古くなるだけ)
+ */
+#if defined(CPUCORE_IA32)
+#define	CFG_EXTMEM_MAX	63		/* pccore_set と同じ */
+#else
+#define	CFG_EXTMEM_MAX	13
+#endif
+
+JNIEXPORT jintArray JNICALL Java_jp_sawada_np2android_Np2Native_getMachineCfg(JNIEnv *env, jclass cls)
+{
+	jint v[7];
+	jintArray ret;
+
+	v[0] = (jint)np2cfg.EXTMEM;
+	v[1] = (jint)np2cfg.multiple;
+	v[2] = (np2cfg.baseclock < ((PCBASECLOCK25 + PCBASECLOCK20) / 2)) ? PCBASECLOCK20 : PCBASECLOCK25;
+	v[3] = (jint)pccore.extmem;
+	v[4] = (jint)pccore.multiple;
+	v[5] = CFG_EXTMEM_MAX;
+	v[6] = PCCORE_MULTIPLE_MAX;
+	ret = (*env)->NewIntArray(env, 7);
+	if (ret != NULL) {
+		(*env)->SetIntArrayRegion(env, ret, 0, 7, v);
+	}
+	return ret;
+}
+
+/* 値を np2cfg に入れるのはエミュレータのスレッドで行う (内蔵メニューの OK と同じスレッド)。効くのは次のリセットから */
+NP2JNI(setMachineCfg)(JNIEnv *env, jclass cls, jint extmem, jint multiple)
+{
+	push(NP2CMD_SETMACHINE, extmem, multiple);
+}
+
+static void setmachine(int extmem, int multiple)
+{
+	UINT update = 0;
+
+	if ((extmem >= 0) && (extmem <= CFG_EXTMEM_MAX) && (np2cfg.EXTMEM != (UINT8)extmem)) {
+		np2cfg.EXTMEM = (UINT8)extmem;
+		update |= SYS_UPDATECFG | SYS_UPDATEMEMORY;
+	}
+	if ((multiple >= 1) && (multiple <= PCCORE_MULTIPLE_MAX) && (np2cfg.multiple != (UINT)multiple)) {
+		np2cfg.multiple = (UINT)multiple;
+		update |= SYS_UPDATECFG | SYS_UPDATECLOCK;
+	}
+	__android_log_print(ANDROID_LOG_INFO, LOG_TAG, "machine cfg: extmem=%u multiple=%u (running %u, x%u)",
+						(UINT)np2cfg.EXTMEM, (UINT)np2cfg.multiple, (UINT)pccore.extmem, (UINT)pccore.multiple);
+	if (update) {
+		sysmng_update(update);		/* np2.cfg を書く */
+	}
 }
 
 void np2bridge_sysiomsk(void)
@@ -1164,6 +1229,10 @@ BOOL np2bridge_handle(const SDL_Event *e)
 
 		case NP2CMD_SETSYSIOMSK:
 			np2bridge_sysiomsk();
+			break;
+
+		case NP2CMD_SETMACHINE:
+			setmachine((int)(intptr_t)u->data1, (int)(intptr_t)u->data2);
 			break;
 
 		default:

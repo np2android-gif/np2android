@@ -28,7 +28,8 @@ enum {
 	NP2CMD_REDRAW,			/* 描画面が作り直されたので全体を描き直す */
 	NP2CMD_SETCD,			/* data2 = char* path (NULL で取り出し)。CD-ROM (IDE セカンダリ・マスター) */
 	NP2CMD_SETHOSTDRV,		/* ホストドライブの設定 (setHostDrv で保存した値) を反映する */
-	NP2CMD_SETSYSIOMSK		/* I/O ポートの見分け方 (setSysIoMask で保存した値) を np2cfg に反映する */
+	NP2CMD_SETSYSIOMSK,		/* I/O ポートの見分け方 (setSysIoMask で保存した値) を np2cfg に反映する */
+	NP2CMD_SETMACHINE		/* ANDROID-CFG: data1 = 拡張メモリ (MB)、data2 = CPU 倍率。np2cfg に入れて np2.cfg を書く (Q17) */
 };
 
 /**
@@ -102,6 +103,12 @@ extern BOOL taskmng_userexit;
 
 /** タッチ操作の移動倍率 (Kotlin から設定) */
 extern float np2bridge_mousespeed;
+
+/**
+ * ANDROID-MOUSE: 「タップして押し直すとドラッグ」を使うか (Kotlin から設定。既定は使う)。
+ * 使うときは 1 回のタップのクリックを DOUBLETAP_GAP 待ってから送る (Q14)。使わないときは待たずに送る (Q17)
+ */
+extern volatile int np2bridge_tapdrag;
 
 #ifdef __cplusplus
 }

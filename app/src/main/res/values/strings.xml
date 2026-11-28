@@ -59,6 +59,8 @@
     <string name="newdisk_creating">%1$s を作成しています…</string>
     <string name="newdisk_done">%1$s を作業フォルダ (disks) に作りました。\nFDD・HDD のメニューから選んで使えます。</string>
     <string name="newdisk_failed">%1$s を作れませんでした</string>
+    <string name="newdisk_creating_pct">%1$s を作成しています… %2$d%%</string>
+    <string name="newdisk_no_space">%1$s を作るには約 %2$sMB の空きが要りますが、作業フォルダのある場所の空きは %3$sMB です。ファイルを整理してから作り直してください。</string>
 
     <!-- このアプリについて -->
     <string name="about_menu">このアプリについて</string>
@@ -66,6 +68,23 @@
 
     <string name="cancel">キャンセル</string>
     <string name="ok">OK</string>
+
+    <!-- タップのクリック (Q17) -->
+    <string name="tap_drag">タップして押し直すとドラッグ</string>
+    <string name="tap_drag_note">オンのときは、タップのクリックを少し (0.3 秒) 待ってから送ります。その間にもう一度押すと、左ボタンを押したままドラッグできます。オフにするとクリックをすぐ送ります。そのときタップしてすぐ押し直すと、ダブルクリックになります。</string>
+
+    <!-- 拡張メモリ・CPU 倍率 (np2.cfg の ExMemory・clk_mult。Q17) -->
+    <string name="machine_title">拡張メモリと CPU 倍率</string>
+    <string name="machine_extmem">拡張メモリ</string>
+    <string name="machine_extmem_value">%1$dMB</string>
+    <string name="machine_extmem_note">Windows 2000 の目安は 32MB 以上、勧めは 64MB です (63MB にすると、本体のメモリと合わせて約 64MB)。</string>
+    <string name="machine_clock">CPU 倍率</string>
+    <string name="machine_clock_value">×%1$d (%2$sMHz)</string>
+    <string name="machine_clock_note">上げすぎると、かえって動きがカクつくことがあります。端末の速さを超えた分は速くならず、ゲストの時計と音が遅れます (目安は README)。</string>
+    <string name="machine_pending">今は %1$s で動いています。リセットすると効きます。</string>
+    <string name="machine_reset_ask">拡張メモリ・CPU 倍率は、リセットすると効きます。今リセットしますか？\n(保存していない作業は消えます)</string>
+    <string name="machine_reset_now">リセット</string>
+    <string name="machine_reset_later">後で</string>
 
     <!-- I/O ポート (np2cfg.sysiomsk) -->
     <string name="io_port16_title">I/O ポート</string>

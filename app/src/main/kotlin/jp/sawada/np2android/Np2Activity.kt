@@ -170,6 +170,7 @@ class Np2Activity : SDLActivity(), KeyboardController.Actions, Np2Menu.Host, Set
 
     private fun applySettings() {
         Np2Native.setMouseSpeed(settings.mouseSpeed)
+        Np2Native.setTapDrag(settings.tapDrag)
         for (v in allPanels) {
             v.alpha = settings.keyOpacity
             v.haptics = settings.haptics

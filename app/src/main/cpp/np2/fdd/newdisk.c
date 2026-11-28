@@ -66,12 +66,13 @@ static BRESULT writehddipl(FILEH fh, UINT ssize, UINT32 tsize) {
 		return(FAILURE);
 	}
 	if (tsize > sizeof(work)) {
+		/* ANDROID-HDD: 4GB まで作るので、0 を 64KB ずつ書く (1KB ずつでは遅い。Q17) */
+		static const UINT8 zero[0x10000];
 		tsize -= sizeof(work);
-		ZeroMemory(work, sizeof(work));
 		while(tsize) {
-			size = min(tsize, sizeof(work));
+			size = min(tsize, sizeof(zero));
 			tsize -= size;
-			if (file_write(fh, work, size) != size) {
+			if (file_write(fh, zero, size) != size) {
 				return(FAILURE);
 			}
 		}
@@ -114,7 +115,9 @@ void newdisk_nhd(const OEMCHAR *fname, UINT hddsize) {
 	UINT	size;
 	BRESULT	r;
 
-	if ((fname == NULL) || (hddsize < 5) || (hddsize > 512)) {
+	/* ANDROID-HDD: 512MB から 4096MB に上げる (Q17)。シリンダは hddsize * 15 で 61440 まで、
+	   ファイルは 4,278,190,592 バイトまでで、どちらも 32 ビットに収まる */
+	if ((fname == NULL) || (hddsize < 5) || (hddsize > 4096)) {
 		goto ndnhd_err;
 	}
 	fh = file_create(fname);

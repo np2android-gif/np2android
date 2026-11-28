@@ -128,8 +128,10 @@ class Np2Menu(private val ctx: Context, private val host: Host) {
         NewDiskType("FDD 2DD (640KB, d88)", "d88", Np2Native.NEWDISK_FDD, listOf("" to 0x10)),
         NewDiskType("HDD SASI (hdi)", "hdi", Np2Native.NEWDISK_HDI,
             listOf("5MB" to 0, "10MB" to 1, "15MB" to 2, "20MB" to 3, "30MB" to 5, "40MB" to 6)),
+        // 1GB・2GB・4GB は Windows 2000 用 (Q17)。newdisk.c が作れるのは 4096MB まで
         NewDiskType("HDD IDE (nhd)", "nhd", Np2Native.NEWDISK_NHD,
-            listOf("20MB" to 20, "40MB" to 40, "80MB" to 80, "128MB" to 128, "256MB" to 256, "512MB" to 512)),
+            listOf("20MB" to 20, "40MB" to 40, "80MB" to 80, "128MB" to 128, "256MB" to 256, "512MB" to 512,
+                "1GB" to 1024, "2GB" to 2048, "4GB" to 4096)),
         NewDiskType("HDD SCSI (hdd)", "hdd", Np2Native.NEWDISK_VHD,
             listOf("20MB" to 20, "40MB" to 40, "80MB" to 80, "128MB" to 128, "256MB" to 256, "512MB" to 512)),
     )
@@ -175,6 +177,13 @@ class Np2Menu(private val ctx: Context, private val host: Host) {
             .show()
     }
 
+    /** 作るファイルの大きさ (バイト、newdisk.c と同じ計算)。分からないものは 0 */
+    private fun newDiskBytes(t: NewDiskType, param: Int): Long = when (t.type) {
+        Np2Native.NEWDISK_NHD -> 512L + param.toLong() * 15 * 8 * 17 * 512   // ヘッダー + シリンダ (MB×15)×8×17×512
+        Np2Native.NEWDISK_VHD -> 288L + 1024    // ヘッダー + IPL だけ (残りは書かない)
+        else -> 0L
+    }
+
     private fun createNewDisk(t: NewDiskType, param: Pair<String, Int>, dest: File) {
         if (dest.exists()) {
             builder()
@@ -183,15 +192,41 @@ class Np2Menu(private val ctx: Context, private val host: Host) {
                 .show()
             return
         }
+        // ANDROID-HDD: 大きなイメージは作る前に空きを確かめる (Q17)。足りなければ作らない。
+        // 作り終えても少し空きが残るよう、64MB を余分に見る
+        val bytes = newDiskBytes(t, param.second)
+        val free = runCatching { android.os.StatFs(dest.parentFile!!.path).availableBytes }.getOrDefault(Long.MAX_VALUE)
+        if (bytes > 0 && free < bytes + NEWDISK_MARGIN) {
+            builder()
+                .setMessage(ctx.getString(R.string.newdisk_no_space, dest.name, mb(bytes), mb(free)))
+                .setPositiveButton(R.string.ok, null)
+                .show()
+            return
+        }
+        val creating = ctx.getString(R.string.newdisk_creating, dest.name)
         val progress = builder()
-            .setMessage(ctx.getString(R.string.newdisk_creating, dest.name))
+            .setMessage(creating)
             .setCancelable(false)
             .show()
         val main = android.os.Handler(android.os.Looper.getMainLooper())
+        // 大きなイメージは時間がかかるので、書けた大きさを見て進みを出す (32MB より大きいとき)
+        var done = false
+        if (bytes > 32L * 1024 * 1024) {
+            val tick = object : Runnable {
+                override fun run() {
+                    if (done) return
+                    val pct = (dest.length() * 100 / bytes).coerceIn(0, 100)
+                    progress.setMessage(ctx.getString(R.string.newdisk_creating_pct, dest.name, pct.toInt()))
+                    main.postDelayed(this, 500)
+                }
+            }
+            main.postDelayed(tick, 500)
+        }
         kotlin.concurrent.thread(name = "newdisk") {
             val ok = runCatching { Np2Native.createDisk(dest.absolutePath, t.type, param.second) }
                 .getOrDefault(false)
             main.post {
+                done = true
                 progress.dismiss()
                 if (ok) {
                     builder()
@@ -205,6 +240,8 @@ class Np2Menu(private val ctx: Context, private val host: Host) {
             }
         }
     }
+
+    private fun mb(bytes: Long): String = "%,d".format(bytes / (1024 * 1024))
 
     private fun diskMenu(t: DiskTarget) {
         val items = mutableListOf<Pair<String, () -> Unit>>()
@@ -532,3 +569,6 @@ class Np2Menu(private val ctx: Context, private val host: Host) {
         val SCSI_EXTENSIONS = setOf("hdd", "nhd", "hdi", "hdn", "hds", "vhd")
     }
 }
+
+/** 新しいディスクイメージを作った後にも残しておく空き (Q17) */
+private const val NEWDISK_MARGIN = 64L * 1024 * 1024

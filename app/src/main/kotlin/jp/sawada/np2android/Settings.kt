@@ -92,6 +92,14 @@ class Settings(context: Context) {
     /** I/O ポートの見分け方をエミュレータに渡す。起動時はエミュレータスレッドが動き出す前 (onCreate) に呼ぶ */
     fun applySysIoMask() = Np2Native.setSysIoMask(ioPort16)
 
+    /**
+     * タップして押し直すとドラッグ (Q14)。オンなら 1 回のタップのクリックを 300ms 待ってから送る。
+     * オフなら待たずに送る (Q17)。設定の正はここで、np2.cfg には保存しない
+     */
+    var tapDrag: Boolean
+        get() = prefs.getBoolean("tap_drag", true)
+        set(v) = prefs.edit().putBoolean("tap_drag", v).apply()
+
     /** 「ファイル管理」の注意書きを表示済みか */
     var fileManagerNoticeShown: Boolean
         get() = prefs.getBoolean("file_manager_notice_shown", false)
@@ -202,6 +210,84 @@ object SettingsDialog {
             { "${(it * 100).toInt()}%" }) { settings.keyOpacity = it }
         switch("右の余白にキーを表示 (横画面)", settings.showSide) { settings.showSide = it }
         switch("キーを押したときに振動", settings.haptics) { settings.haptics = it }
+        switch(context.getString(R.string.tap_drag), settings.tapDrag) { settings.tapDrag = it }
+        root.addView(TextView(context).apply {
+            setTextAppearance(android.R.style.TextAppearance_DeviceDefault_Small)
+            text = context.getString(R.string.tap_drag_note)
+        })
+
+        // ---- 拡張メモリ・CPU 倍率 (np2.cfg。内蔵メニューと同じ値。効くのはリセットから、Q17) ----
+        val machine = Np2Native.machineCfg()
+        var extMem = machine?.extMem ?: 0
+        var multiple = machine?.multiple ?: 1
+        if (machine != null) {
+            root.addView(TextView(context).apply {
+                setTextAppearance(android.R.style.TextAppearance_DeviceDefault_Medium)
+                text = context.getString(R.string.machine_title)
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                .apply { topMargin = (16 * dp).toInt() })
+            val pending = TextView(context).apply {
+                setTextAppearance(android.R.style.TextAppearance_DeviceDefault_Small)
+            }
+            fun updatePending() {
+                val parts = mutableListOf<String>()
+                if (extMem != machine.runningExtMem) {
+                    parts += context.getString(R.string.machine_extmem_value, machine.runningExtMem)
+                }
+                if (multiple != machine.runningMultiple) {
+                    parts += context.getString(R.string.machine_clock_value,
+                        machine.runningMultiple, mhz(machine.baseClock, machine.runningMultiple))
+                }
+                pending.text = if (parts.isEmpty()) "" else context.getString(R.string.machine_pending, parts.joinToString("・"))
+                pending.visibility = if (parts.isEmpty()) View.GONE else View.VISIBLE
+            }
+            fun intSlider(title: String, min: Int, max: Int, value: Int, format: (Int) -> String, commit: (Int) -> Unit) {
+                val label = TextView(context).apply {
+                    setTextAppearance(android.R.style.TextAppearance_DeviceDefault_Medium)
+                }
+                fun update(v: Int) { label.text = "$title: ${format(v)}" }
+                update(value)
+                root.addView(label)
+                root.addView(SeekBar(context).apply {
+                    this.max = max - min
+                    progress = (value - min).coerceIn(0, max - min)
+                    setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+                        var tracking = false
+                        override fun onProgressChanged(s: SeekBar, p: Int, fromUser: Boolean) {
+                            update(min + p)
+                            // 指で動かしている間は保存せず、離したときに np2.cfg に書く (キーで動かしたときはすぐ)
+                            if (fromUser && !tracking) commit(min + p)
+                        }
+                        override fun onStartTrackingTouch(s: SeekBar) { tracking = true }
+                        override fun onStopTrackingTouch(s: SeekBar) { tracking = false; commit(min + s.progress) }
+                    })
+                }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                    .apply { bottomMargin = (4 * dp).toInt() })
+            }
+            intSlider(context.getString(R.string.machine_extmem), 0, machine.maxExtMem, extMem,
+                { context.getString(R.string.machine_extmem_value, it) }) {
+                extMem = it
+                Np2Native.setMachineCfg(extMem, multiple)
+                updatePending()
+            }
+            root.addView(TextView(context).apply {
+                setTextAppearance(android.R.style.TextAppearance_DeviceDefault_Small)
+                text = context.getString(R.string.machine_extmem_note)
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+                .apply { bottomMargin = (12 * dp).toInt() })
+            intSlider(context.getString(R.string.machine_clock), 1, machine.maxMultiple, multiple,
+                { context.getString(R.string.machine_clock_value, it, mhz(machine.baseClock, it)) }) {
+                multiple = it
+                Np2Native.setMachineCfg(extMem, multiple)
+                updatePending()
+            }
+            root.addView(TextView(context).apply {
+                setTextAppearance(android.R.style.TextAppearance_DeviceDefault_Small)
+                text = context.getString(R.string.machine_clock_note)
+            })
+            updatePending()
+            root.addView(pending)
+        }
 
         // ---- ホストドライブ ----
         root.addView(TextView(context).apply {
@@ -320,5 +406,23 @@ object SettingsDialog {
             .setView(android.widget.ScrollView(context).apply { addView(root) })
             .setPositiveButton("閉じる", null)
             .show()
+        // 拡張メモリ・CPU 倍率を変えて、今動いている値と違うなら、リセットするかを聞く (勝手にはリセットしない)
+        if (machine != null) {
+            dialog.setOnDismissListener {
+                val changed = (extMem != machine.extMem) || (multiple != machine.multiple)
+                val differs = (extMem != machine.runningExtMem) || (multiple != machine.runningMultiple)
+                if (changed && differs) {
+                    AlertDialog.Builder(context, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+                        .setTitle(R.string.machine_title)
+                        .setMessage(R.string.machine_reset_ask)
+                        .setPositiveButton(R.string.machine_reset_now) { _, _ -> Np2Native.reset() }
+                        .setNegativeButton(R.string.machine_reset_later, null)
+                        .show()
+                }
+            }
+        }
     }
+
+    /** CPU 倍率のときのクロック (MHz、小数 1 桁) */
+    private fun mhz(baseClock: Int, multiple: Int): String = "%.1f".format(baseClock.toLong() * multiple / 1_000_000.0)
 }
