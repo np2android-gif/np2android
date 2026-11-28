@@ -81,7 +81,7 @@
     <string name="machine_clock">CPU 倍率</string>
     <string name="machine_clock_value">×%1$d (%2$sMHz)</string>
     <string name="machine_clock_note">上げすぎると、かえって動きがカクつくことがあります。端末の速さを超えた分は速くならず、ゲストの時計と音が遅れます (目安は README)。</string>
-    <string name="machine_pending">今は %1$s で動いています。リセットすると効きます。</string>
+    <string name="machine_pending">今は %1$s で動いています。リセットすると変更が有効になります。</string>
     <string name="machine_reset_ask">拡張メモリ・CPU 倍率は、リセットすると効きます。今リセットしますか？\n(保存していない作業は消えます)</string>
     <string name="machine_reset_now">リセット</string>
     <string name="machine_reset_later">後で</string>
