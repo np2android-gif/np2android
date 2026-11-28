@@ -34,7 +34,7 @@ object Np2Native {
     /** タッチパッド操作の移動倍率 (1.0 = 指の移動量どおり) */
     @JvmStatic external fun setMouseSpeed(speed: Float)
     /**
-     * 「タップして押し直すとドラッグ」を使うか (Q17)。true (既定) なら 1 回のタップのクリックを 300ms 待ってから送る。
+     * 「ダブルタップ＆ドラッグ」を使うか (Q17)。true (既定) なら 1 回のタップのクリックを 300ms 待ってから送る。
      * false なら待たずに送る (タップして押し直すと、Q14 より前と同じくダブルクリックになる)
      */
     @JvmStatic external fun setTapDrag(enabled: Boolean)

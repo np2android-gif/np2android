@@ -6,7 +6,7 @@
  *   - 1 本指ドラッグ        : マウス移動 (相対)
  *   - 1 本指タップ          : 左クリック (DOUBLETAP_GAP だけ待ってから送る)
  *   - タップ直後に押して保持 : 左ボタンを押したままドラッグ (ダブルタップ＝ダブルクリック)
- *   - 設定で「タップして押し直すとドラッグ」をオフにすると (np2bridge_tapdrag = 0)、タップのクリックを
+ *   - 設定で「ダブルタップ＆ドラッグ」をオフにすると (np2bridge_tapdrag = 0)、タップのクリックを
  *     待たずに送る。タップ直後に押して保持すると Q14 より前と同じく左ボタンを押す (ゲストにはダブルクリック)
  *   - 2 本指タップ          : 右クリック
  *   - ソフトキーの L・R を押している間は、指はカーソルを動かすだけ (タップ・2 本指タップ・
@@ -321,7 +321,7 @@ static void touch_up(const SDL_TouchFingerEvent *f) {
 		}
 	}
 	else if (quick && (s_touch.maxcount == 1) && (!np2bridge_tapdrag)) {
-		/* ANDROID-MOUSE: 「タップして押し直すとドラッグ」がオフ。クリックを待たずに送る (Q17) */
+		/* ANDROID-MOUSE: 「ダブルタップ＆ドラッグ」がオフ。クリックを待たずに送る (Q17) */
 		mousemng_click(MOUSEMNG_LEFT);
 		s_touch.lastclick = (now != 0) ? now : 1;
 		TOUCHLOG("tap -> left click (no wait)");

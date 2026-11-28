@@ -105,7 +105,7 @@ extern BOOL taskmng_userexit;
 extern float np2bridge_mousespeed;
 
 /**
- * ANDROID-MOUSE: 「タップして押し直すとドラッグ」を使うか (Kotlin から設定。既定は使う)。
+ * ANDROID-MOUSE: 「ダブルタップ＆ドラッグ」を使うか (Kotlin から設定。既定は使う)。
  * 使うときは 1 回のタップのクリックを DOUBLETAP_GAP 待ってから送る (Q14)。使わないときは待たずに送る (Q17)
  */
 extern volatile int np2bridge_tapdrag;

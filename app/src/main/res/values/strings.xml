@@ -70,8 +70,8 @@
     <string name="ok">OK</string>
 
     <!-- タップのクリック (Q17) -->
-    <string name="tap_drag">タップして押し直すとドラッグ</string>
-    <string name="tap_drag_note">オンのときは、タップのクリックを少し (0.3 秒) 待ってから送ります。その間にもう一度押すと、左ボタンを押したままドラッグできます。オフにするとクリックをすぐ送ります。そのときタップしてすぐ押し直すと、ダブルクリックになります。</string>
+    <string name="tap_drag">ダブルタップ＆ドラッグ</string>
+    <string name="tap_drag_note">オンのときは、タップのクリックを少し (0.3 秒) 待ってから送ります。その間に再度タップし押しっぱなしにするとドラッグできます。オフにすると待ち時間は無くなりますが、ダブルタップしたまま押しっぱなしにしてもダブルクリックとなります。</string>
 
     <!-- 拡張メモリ・CPU 倍率 (np2.cfg の ExMemory・clk_mult。Q17) -->
     <string name="machine_title">拡張メモリと CPU 倍率</string>

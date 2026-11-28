@@ -93,7 +93,7 @@ class Settings(context: Context) {
     fun applySysIoMask() = Np2Native.setSysIoMask(ioPort16)
 
     /**
-     * タップして押し直すとドラッグ (Q14)。オンなら 1 回のタップのクリックを 300ms 待ってから送る。
+     * ダブルタップ＆ドラッグ (Q14)。オンなら 1 回のタップのクリックを 300ms 待ってから送る。
      * オフなら待たずに送る (Q17)。設定の正はここで、np2.cfg には保存しない
      */
     var tapDrag: Boolean

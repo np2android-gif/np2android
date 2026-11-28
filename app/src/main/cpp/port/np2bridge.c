@@ -286,7 +286,7 @@ NP2JNI(setMouseSpeed)(JNIEnv *env, jclass cls, jfloat speed)
 	np2bridge_mousespeed = speed;
 }
 
-/* ANDROID-MOUSE: 「タップして押し直すとドラッグ」を使うか (Q17)。int 1 個の書き込みなので、移動倍率と同じく
+/* ANDROID-MOUSE: 「ダブルタップ＆ドラッグ」を使うか (Q17)。int 1 個の書き込みなので、移動倍率と同じく
    エミュレータのスレッドへは送らず直接書く。待っているタップのクリックは、オフにしても touch_update が送る */
 NP2JNI(setTapDrag)(JNIEnv *env, jclass cls, jboolean enabled)
 {
