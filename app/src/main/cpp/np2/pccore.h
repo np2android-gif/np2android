@@ -12,6 +12,9 @@ enum {
 	PCBASECLOCK20		= 1996800
 };
 
+/* ANDROID-CLOCK: CPU 倍率の上限 (Q17)。pccore_set・内蔵メニュー (dlgcfg.c)・アプリの「設定」 (np2bridge.c) が使う */
+#define	PCCORE_MULTIPLE_MAX	128
+
 enum {
 	CPUMODE_8MHZ		= 0x20,
 

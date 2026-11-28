@@ -149,9 +149,9 @@ static void pccore_set(const NP2CFG *pConfig)
 	{
 		multiple = 1;
 	}
-	else if (multiple > 32)
+	else if (multiple > PCCORE_MULTIPLE_MAX)		/* ANDROID-CLOCK: 32 Ç©ÇÁè„Ç∞ÇÈ (Q17) */
 	{
-		multiple = 32;
+		multiple = PCCORE_MULTIPLE_MAX;
 	}
 	pccore.multiple = multiple;
 	pccore.realclock = pccore.baseclock * multiple;

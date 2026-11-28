@@ -108,7 +108,7 @@ void pcm86_setnextintr(void) {
 
 	PCM86 pcm86 = &g_pcm86;
 	SINT32	cnt;
-	SINT32	clk;
+	SINT64	clk;	/* ANDROID-CLOCK: SINT32 ‚Å‚Í 111 ”{‚©‚ç‚ ‚Ó‚ê‚é‚Ì‚Å 64 ƒrƒbƒg‚ÅŒvŽZ‚·‚é (Q17) */
 
 	if (pcm86->fifo & 0x80)
 	{
@@ -131,7 +131,13 @@ void pcm86_setnextintr(void) {
 			clk >>= 7;
 //			clk++;						/* roundup */
 			clk *= pccore.multiple;
-			nevent_set(NEVENT_86PCM, clk, pcm86_cb, NEVENT_ABSOLUTE);
+			/* ANDROID-CLOCK: nevent ‚ÌŽžŠÔ‚Í SINT32 ‚ÅAnevent_set ‚Í¡‚ÌŒo‰ß•ª‚ð‘«‚·‚Ì‚Å—]—T‚ðŽc‚µ‚ÄŽ~‚ß‚éB
+			   128 ”{‚Å FIFO ‚ª–ž”t‚Ì 4.1kHz (–ñ 8 •bæ) ‚Ì‚Æ‚«‚¾‚¯‰z‚¦‚éBŽ~‚ß‚é‚Ææ‚É pcm86_cb ‚ª—ˆ‚ÄA
+			   ‚»‚±‚ÅŽc‚è‚ðŒvŽZ‚µ’¼‚·‚Ì‚ÅAÅŒã‚ÌŠ„‚èž‚Ý‚ÌŽž‚Í•Ï‚í‚ç‚È‚¢ */
+			if (clk > 0x40000000) {
+				clk = 0x40000000;
+			}
+			nevent_set(NEVENT_86PCM, (SINT32)clk, pcm86_cb, NEVENT_ABSOLUTE);
 		}
 	}
 }

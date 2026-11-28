@@ -146,6 +146,28 @@ static const MENUPRM res_cfg[] = {
 // ----
 
 static const OEMCHAR str_mulfmt[] = OEMTEXT("x%u");
+
+/* ANDROID-CLOCK: スライダーは 16 倍までだが、np2.cfg やアプリの「設定」ではもっと上げられる (Q17)。
+   開いたときのスライダーの位置を覚えておき、動かしていなければ今の倍率をそのまま使う
+   (前は OK を押しただけで 16 倍に下がった) */
+static UINT s_mulslider;
+
+static UINT getmultiple(void) {
+
+	UINT	multiple;
+
+	multiple = menudlg_getval(DID_MULTIPLE);
+	if (multiple == s_mulslider) {
+		multiple = np2cfg.multiple;
+	}
+	if (multiple < 1) {
+		multiple = 1;
+	}
+	else if (multiple > PCCORE_MULTIPLE_MAX) {
+		multiple = PCCORE_MULTIPLE_MAX;
+	}
+	return(multiple);
+}
 static const OEMCHAR str_clockfmt[] = OEMTEXT("%2u.%.4uMHz");
 static const OEMCHAR str_buffmt[] = OEMTEXT("%ums");
 
@@ -154,13 +176,7 @@ static void setmulstr(void) {
 	UINT	multiple;
 	OEMCHAR	work[32];
 
-	multiple = menudlg_getval(DID_MULTIPLE);
-	if (multiple < 1) {
-		multiple = 1;
-	}
-	else if (multiple > 32) {
-		multiple = 32;
-	}
+	multiple = getmultiple();						/* ANDROID-CLOCK */
 	OEMSPRINTF(work, str_mulfmt, multiple);
 	menudlg_settext(DID_MULSTR, work);
 }
@@ -177,13 +193,7 @@ static void setclockstr(void) {
 	else {
 		clock = PCBASECLOCK25 / 100;
 	}
-	multiple = menudlg_getval(DID_MULTIPLE);
-	if (multiple < 1) {
-		multiple = 1;
-	}
-	else if (multiple > 32) {
-		multiple = 32;
-	}
+	multiple = getmultiple();						/* ANDROID-CLOCK */
 	clock *= multiple;
 	OEMSPRINTF(work, str_clockfmt, clock / 10000, clock % 10000);
 	menudlg_settext(DID_CLOCKSTR, work);
@@ -218,6 +228,7 @@ static void dlginit(void) {
 	}
 	menudlg_setval(id, 1);
 	menudlg_setval(DID_MULTIPLE, np2cfg.multiple);
+	s_mulslider = menudlg_getval(DID_MULTIPLE);		/* ANDROID-CLOCK: 16 を超えるときは 16 になっている */
 
 	if (!milstr_cmp(np2cfg.model, str_VM)) {
 		id = DID_MODELVM;
@@ -273,13 +284,7 @@ const OEMCHAR	*str;
 		np2cfg.baseclock = val;
 		update |= SYS_UPDATECFG | SYS_UPDATECLOCK;
 	}
-	val = menudlg_getval(DID_MULTIPLE);
-	if (val < 1) {
-		val = 1;
-	}
-	else if (val > 32) {
-		val = 32;
-	}
+	val = getmultiple();							/* ANDROID-CLOCK */
 	if (np2cfg.multiple != val) {
 		np2cfg.multiple = val;
 		update |= SYS_UPDATECFG | SYS_UPDATECLOCK;

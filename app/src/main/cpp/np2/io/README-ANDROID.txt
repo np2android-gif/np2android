@@ -70,3 +70,28 @@ dmac.c (印 ANDROID-FDC、IA-32 構成だけ)
   - 他に DMA を使うもの: SASI (IA-32 構成には無い)、PCM 音源 (cs4231、dmac_getdatas で同じ adrs を使う)。
     NT 系のゲストが音源のチャネルに 0E0xh を書けば、そちらも正しい番地になる。IDE は DMA を使わない。
   - NP21/W の dmac.c のほかの違い (1Dh、11h を読んだら TC を落とす、など) は取り込んでいない。
+
+
+CPU 倍率の上限と桁あふれ (印 ANDROID-CLOCK、Q17)
+================================================
+
+xnp2 は CPU 倍率 (np2cfg.multiple・pccore.multiple) を 32 で切っていた。Q17 で上限を 128 に上げ、
+アプリの「設定」から選べるようにした。倍率は realclock (= baseclock × 倍率) を通して、いろいろな所の
+クロック数の計算に入る。128 倍 (約 315MHz) で 32 ビットからあふれる所を直した。
+  - pccore.h: 上限を PCCORE_MULTIPLE_MAX (128) にまとめた。pccore.c の pccore_set、内蔵メニューの
+    embed/menu/dlgcfg.c、アプリの「設定」(port/np2bridge.c の getMachineCfg・setMachineCfg) が使う。
+  - embed/menu/dlgcfg.c: 内蔵メニューのスライダーは 1〜16 倍のまま。今までは np2.cfg で 32 倍にしていても、
+    設定を開いて OK を押すと 16 倍に下がった。スライダーを動かしていなければ np2cfg.multiple を保つようにした。
+  - sound/cs4231c.c (2 か所): realclock × 16 を UINT64 で計算する (110 倍からあふれていた)。
+  - sound/pcm86c.c pcm86_setnextintr: SINT64 で計算する (111 倍からあふれていた)。nevent の時間は SINT32 で、
+    nevent_set は今のスライスの経過分を足すので、結果を 0x40000000 (128 倍で約 3.4 秒) で止めて余裕を残す
+    (0x7fffffff で止めると足し算であふれ、すぐに割り込んだ)。越えるのは 128 倍で FIFO が満杯の 4.1kHz
+    (約 8 秒先) のときだけ。止めると先に pcm86_cb が来て残りを計算し直すので、割り込みの時刻は変わらない
+    (DOS から 86 ボードの PCM を鳴らすテストで確かめた)。
+  - cbus/pc9861k.c pc9861_makeclk: realclock × mul2 (最大 22) を UINT64 で計算する (80 倍からあふれていた)。
+  - io/gdc_sub.c calc_gdcslavewait: 点の数 × 27648 × 倍率 を SINT64 で計算する。32 倍でも、線が 2,428 点より
+    長いとあふれ、GDC の描画の待ちが短くなっていた (今までもあった問題)。
+  - 他の所 (pit・pic・nevent_setbyms・mpu98ii など) は 128 倍ではあふれない (Q17 指示書 5.2 の表)。
+  - NP21/W (上限 2048 倍) も cs4231 を UINT64 にしているが、コードは取り込んでいない (同じ考えで書いた)。
+    NP21/W は pc9861k・pcm86_setnextintr・gdc_sub をそのままにしている。
+  - 倍率と拡張メモリは今までどおり pccore (ステートに入る) と np2.cfg にあり、ステートの形は変わらない。

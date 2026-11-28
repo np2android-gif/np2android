@@ -123,7 +123,7 @@ void gdcsub_setslavewait(UINT32 wait) {
 
 static void calc_gdcslavewait(UINT dots) {
 
-	SINT32	clk;
+	SINT64	clk;	/* ANDROID-CLOCK: SINT32 Ç≈ÇÕ ì_ÇÃêî Å~ 27648 Å~ î{ó¶ Ç™Ç†Ç”ÇÍÅAë“ÇøÇ™íZÇ≠Ç»Ç¡ÇƒÇ¢ÇΩ (Q17) */
 
 	clk = dots;
 	if (pccore.cpumode & CPUMODE_8MHZ) {
@@ -135,7 +135,7 @@ static void calc_gdcslavewait(UINT dots) {
 	clk *= pccore.multiple;
 	clk /= 15625;
 	clk += 30 * pccore.multiple;
-	gdcsub_setslavewait(clk);
+	gdcsub_setslavewait((UINT32)clk);
 }
 
 void gdcsub_setvectl(GDCVECT *vect, int xx1, int yy1, int xx2, int yy2) {

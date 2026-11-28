@@ -96,7 +96,7 @@ void cs4231_dma(NEVENTITEM item) {
 				}
 			}
 			if ((dmach->leng.w) && (cs4231cfg.rate)) {
-				cnt = pccore.realclock * 16 / cs4231cfg.rate;
+				cnt = (SINT32)((UINT64)pccore.realclock * 16 / cs4231cfg.rate);	/* ANDROID-CLOCK: 110 倍からあふれるので 64 ビットで (Q17) */
 				nevent_set(NEVENT_CS4231, cnt, cs4231_dma, NEVENT_RELATIVE);
 			}
 		}
@@ -127,7 +127,7 @@ REG8 DMACCALL cs4231dmafunc(REG8 func) {
 	switch(func) {
 		case DMAEXT_START:
 			if (cs4231cfg.rate) {
-				cnt = pccore.realclock * 16 / cs4231cfg.rate;
+				cnt = (SINT32)((UINT64)pccore.realclock * 16 / cs4231cfg.rate);	/* ANDROID-CLOCK: 110 倍からあふれるので 64 ビットで (Q17) */
 				nevent_set(NEVENT_CS4231, cnt, cs4231_dma, NEVENT_ABSOLUTE);
 			}
 			break;
